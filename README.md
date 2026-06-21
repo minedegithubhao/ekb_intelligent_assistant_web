@@ -1,6 +1,25 @@
 ﻿# ekb_intelligent_assistant_web
 
-前端项目目录骨架。
+EKB 智能助手前端项目，基于 Vue 3、Vite 和 Element Plus 构建。
+
+## 运行方式
+
+```bash
+npm install
+npm run dev
+```
+
+开发服务器启动后访问：
+
+```text
+http://localhost:5173/
+```
+
+## 构建方式
+
+```bash
+npm run build
+```
 
 ## 目录结构
 
@@ -18,9 +37,13 @@ src/
   utils/            工具函数
 ```
 
-## 说明
+## 页面说明
 
-当前仓库仅保留前端基础目录结构，后续代码请按功能放入对应目录。
+- `/login`：登录页面，支持普通用户和管理员身份切换。
+- `/user-chat`：用户问答页面。
+- `/admin`：后台管理页面，包含用户管理、知识库管理和评估管理。
+
+## 开发说明
 
 - `api`：统一管理后端接口请求。
 - `router`：统一管理页面路由。
@@ -29,3 +52,7 @@ src/
 - `views`：存放页面级模块。
 - `components`：存放可复用通用组件。
 - `utils`：存放通用工具方法。
+
+## 接口文档
+
+- [登录接口文档](docs/login-api.md)

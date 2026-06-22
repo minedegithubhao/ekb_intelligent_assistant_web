@@ -1,5 +1,85 @@
 <template>
   <AdminLayout @menu-change="currentTab = $event">
+    <section v-if="currentTab === 'dashboard'" class="dashboard-panel">
+      <div class="pane-card">
+        <div class="dashboard-header">
+          <div>
+            <h2>仪表台参数</h2>
+            <p>当前生效配置来源：{{ dashboardConfig.source || '-' }}</p>
+          </div>
+          <div class="dashboard-actions">
+            <el-tag v-if="dashboardConfig.version" type="success" effect="plain">
+              v{{ dashboardConfig.version.version_no }} · {{ dashboardConfig.version.status }}
+            </el-tag>
+            <el-button @click="fetchDashboardConfig">刷新</el-button>
+            <el-button type="primary" @click="openConfigModal">修改参数</el-button>
+          </div>
+        </div>
+
+        <div class="param-grid" v-loading="dashboardLoading">
+          <div class="param-card">
+            <span>模型</span>
+            <strong>{{ dashboardConfig.model || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>Embedding</span>
+            <strong>{{ dashboardConfig.embedding_model || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>重排模型</span>
+            <strong>{{ dashboardConfig.rerank_model || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>变体生成</span>
+            <strong>{{ dashboardConfig.variant_generation_enabled ? '开' : '关' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>重排</span>
+            <strong>{{ dashboardConfig.rerank_enabled ? '开' : '关' }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-two-column">
+        <div class="pane-card">
+          <h3>TopK</h3>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="FAQ">{{ dashboardConfig.top_k?.faq ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Doc">{{ dashboardConfig.top_k?.doc ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Rerank">{{ dashboardConfig.top_k?.rerank ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Final Evidence">
+              {{ dashboardConfig.top_k?.final_evidence ?? '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="pane-card">
+          <h3>阈值</h3>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="FAQ 高置信">
+              {{ dashboardConfig.thresholds?.faq_high_conf ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="FAQ 中置信">
+              {{ dashboardConfig.thresholds?.faq_middle_conf ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="文档证据">
+              {{ dashboardConfig.thresholds?.doc_evidence ?? '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+
+      <div class="pane-card">
+        <h3>权重</h3>
+        <el-descriptions :column="4" border>
+          <el-descriptions-item label="FAQ Dense">{{ dashboardConfig.weights?.faq_dense ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="FAQ Sparse">{{ dashboardConfig.weights?.faq_sparse ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Doc Dense">{{ dashboardConfig.weights?.doc_dense ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Doc Sparse">{{ dashboardConfig.weights?.doc_sparse ?? '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </section>
+
     <section v-if="currentTab === 'users'" class="pane-card">
       <div class="filter-wrapper">
         <el-input v-model="userQuery.keyword" placeholder="搜索账号或显示名称" class="filter-item search-input" clearable />
@@ -20,6 +100,7 @@
         <el-table-column prop="userId" label="用户ID" width="110" />
         <el-table-column prop="username" label="账号" />
         <el-table-column prop="displayName" label="显示名称" />
+        <el-table-column prop="department" label="部门" />
         <el-table-column prop="role" label="角色">
           <template #default="scope">
             <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'info'" size="small">
@@ -27,6 +108,7 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="knowledgeBaseName" label="知识库类型" width="130" />
         <el-table-column prop="status" label="状态">
           <template #default="scope">
             <span class="status-dot" :class="scope.row.status"></span>
@@ -37,7 +119,14 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="openUserModal('edit', scope.row)">修改</el-button>
-            <el-button link type="danger" @click="deleteUser(scope.row.userId)">删除</el-button>
+            <el-button
+              v-if="scope.row.status === 'enabled' && scope.row.userId !== currentUserId"
+              link
+              type="danger"
+              @click="disableUser(scope.row.userId)"
+            >
+              禁用
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -177,10 +266,22 @@
         <el-form-item label="显示名称">
           <el-input v-model="userForm.displayName" placeholder="请输入对外展示的名称" />
         </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="userForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-input v-model="userForm.department" placeholder="请输入部门" />
+        </el-form-item>
         <el-form-item label="角色设定">
           <el-radio-group v-model="userForm.role">
             <el-radio value="user">普通用户(user)</el-radio>
             <el-radio value="admin">管理员(admin)</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="userForm.role === 'user'" label="知识库类型">
+          <el-radio-group v-model="userForm.category">
+            <el-radio value="merchant">企业知识库</el-radio>
+            <el-radio value="individual">个人知识库</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="账号状态">
@@ -199,6 +300,83 @@
       <template #footer>
         <el-button @click="userModalVisible = false">取消</el-button>
         <el-button type="primary" @click="submitUserForm">确定保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="configModalVisible" title="修改仪表台参数" width="720px">
+      <el-form :model="configForm" label-position="top">
+        <div class="two-column">
+          <el-form-item label="模型">
+            <el-input v-model="configForm.model" />
+          </el-form-item>
+          <el-form-item label="Embedding 模型">
+            <el-input v-model="configForm.embedding_model" />
+          </el-form-item>
+        </div>
+        <el-form-item label="重排模型">
+          <el-input v-model="configForm.rerank_model" />
+        </el-form-item>
+        <div class="two-column">
+          <el-form-item label="变体生成">
+            <el-switch v-model="configForm.variant_generation_enabled" active-text="开" inactive-text="关" />
+          </el-form-item>
+          <el-form-item label="重排">
+            <el-switch v-model="configForm.rerank_enabled" active-text="开" inactive-text="关" />
+          </el-form-item>
+        </div>
+
+        <h4>TopK</h4>
+        <div class="four-column">
+          <el-form-item label="FAQ">
+            <el-input-number v-model="configForm.faq_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Doc">
+            <el-input-number v-model="configForm.doc_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Rerank">
+            <el-input-number v-model="configForm.rerank_top_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Final Evidence">
+            <el-input-number v-model="configForm.final_evidence_top_k" :min="1" />
+          </el-form-item>
+        </div>
+
+        <h4>阈值</h4>
+        <div class="three-column">
+          <el-form-item label="FAQ 高置信">
+            <el-input-number v-model="configForm.faq_high_conf_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="FAQ 中置信">
+            <el-input-number v-model="configForm.faq_middle_conf_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="文档证据">
+            <el-input-number v-model="configForm.doc_evidence_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+        </div>
+
+        <h4>权重</h4>
+        <div class="four-column">
+          <el-form-item label="FAQ Dense">
+            <el-input-number v-model="configForm.faq_dense_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="FAQ Sparse">
+            <el-input-number v-model="configForm.faq_sparse_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="Doc Dense">
+            <el-input-number v-model="configForm.doc_dense_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="Doc Sparse">
+            <el-input-number v-model="configForm.doc_sparse_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="版本说明">
+          <el-input v-model="configDescription" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="configSaving" @click="submitConfigForm">保存并启用</el-button>
       </template>
     </el-dialog>
 
@@ -270,10 +448,84 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, UploadFilled } from '@element-plus/icons-vue'
+import { createConfigVersion, getDashboardConfig } from '@/api/adminConfig'
+import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
-const currentTab = ref('users')
+const currentTab = ref('dashboard')
 const loading = ref(false)
+const currentUserId = JSON.parse(localStorage.getItem('userInfo') || '{}').id
+const dashboardLoading = ref(false)
+const dashboardConfig = ref({})
+const configModalVisible = ref(false)
+const configSaving = ref(false)
+const configDescription = ref('')
+const configForm = reactive({
+  model: '',
+  embedding_model: '',
+  rerank_model: '',
+  variant_generation_enabled: true,
+  rerank_enabled: true,
+  faq_k: 20,
+  doc_k: 20,
+  rerank_top_k: 8,
+  final_evidence_top_k: 6,
+  faq_high_conf_threshold: 0.85,
+  faq_middle_conf_threshold: 0.65,
+  doc_evidence_threshold: 0.55,
+  faq_dense_weight: 0.5,
+  faq_sparse_weight: 0.5,
+  doc_dense_weight: 0.7,
+  doc_sparse_weight: 0.3
+})
+
+const editableConfigKeys = Object.keys(configForm)
+
+const fetchDashboardConfig = async () => {
+  dashboardLoading.value = true
+  try {
+    dashboardConfig.value = await getDashboardConfig()
+  } catch (error) {
+    ElMessage.error(error.message || '仪表台参数加载失败')
+  } finally {
+    dashboardLoading.value = false
+  }
+}
+
+const openConfigModal = () => {
+  const raw = dashboardConfig.value.raw || {}
+  editableConfigKeys.forEach((key) => {
+    if (raw[key] !== undefined) {
+      configForm[key] = raw[key]
+    }
+  })
+  configDescription.value = `调整仪表台参数 ${new Date().toLocaleString()}`
+  configModalVisible.value = true
+}
+
+const submitConfigForm = async () => {
+  const raw = dashboardConfig.value.raw || {}
+  const nextConfig = { ...raw }
+  editableConfigKeys.forEach((key) => {
+    nextConfig[key] = configForm[key]
+  })
+
+  configSaving.value = true
+  try {
+    await createConfigVersion({
+      config: nextConfig,
+      description: configDescription.value,
+      activate: true
+    })
+    ElMessage.success('参数已保存并启用')
+    configModalVisible.value = false
+    fetchDashboardConfig()
+  } catch (error) {
+    ElMessage.error(error.message || '参数保存失败')
+  } finally {
+    configSaving.value = false
+  }
+}
 
 const userQuery = reactive({ keyword: '', role: '', status: '' })
 const userList = ref([])
@@ -283,35 +535,25 @@ const userForm = reactive({
   userId: '',
   username: '',
   password: '',
+  name: '',
   displayName: '',
+  department: '',
   role: 'user',
   status: 'enabled',
+  category: 'merchant',
   remark: ''
 })
 
-const fetchUsers = () => {
+const fetchUsers = async () => {
   loading.value = true
-  setTimeout(() => {
-    userList.value = [
-      {
-        userId: 'u_10001',
-        username: 'lixiangchen',
-        displayName: 'LiXiangchen',
-        role: 'user',
-        status: 'enabled',
-        createdAt: '2026-06-21 10:00:00'
-      },
-      {
-        userId: 'u_10002',
-        username: 'zhangsan',
-        displayName: '张三',
-        role: 'admin',
-        status: 'disabled',
-        createdAt: '2026-06-21 11:00:00'
-      }
-    ]
+  try {
+    const data = await getAdminUsers(userQuery)
+    userList.value = data.items || []
+  } catch (error) {
+    ElMessage.error(error.message || '用户列表加载失败')
+  } finally {
     loading.value = false
-  }, 300)
+  }
 }
 
 const openUserModal = (type, row = null) => {
@@ -326,23 +568,48 @@ const openUserModal = (type, row = null) => {
     userId: '',
     username: '',
     password: '',
+    name: '',
     displayName: '',
+    department: '',
     role: 'user',
     status: 'enabled',
+    category: 'merchant',
     remark: ''
   })
 }
 
-const submitUserForm = () => {
-  ElMessage.success(userModalType.value === 'add' ? '用户创建成功' : '用户信息已更新')
-  userModalVisible.value = false
-  fetchUsers()
+const buildUserPayload = () => ({
+  username: userForm.username,
+  password: userForm.password || undefined,
+  displayName: userForm.displayName,
+  name: userForm.name || userForm.displayName,
+  department: userForm.department,
+  role: userForm.role,
+  status: userForm.status,
+  category: userForm.role === 'admin' ? 'admin' : userForm.category
+})
+
+const submitUserForm = async () => {
+  try {
+    if (userModalType.value === 'add') {
+      await createAdminUser(buildUserPayload())
+      ElMessage.success('用户创建成功')
+    } else {
+      await updateAdminUser(userForm.userId, buildUserPayload())
+      ElMessage.success('用户信息已更新')
+    }
+    userModalVisible.value = false
+    fetchUsers()
+  } catch (error) {
+    ElMessage.error(error.message || '用户保存失败')
+  }
 }
 
-const deleteUser = (id) => {
-  ElMessageBox.confirm('确定删除该账号吗？', '提示', { type: 'warning' })
-    .then(() => {
-      ElMessage.success(`用户 ${id} 已删除`)
+const disableUser = (id) => {
+  ElMessageBox.confirm('确定禁用该账号吗？禁用后该用户不能继续登录。', '提示', { type: 'warning' })
+    .then(async () => {
+      await disableAdminUser(id)
+      ElMessage.success(`用户 ${id} 已禁用`)
       fetchUsers()
     })
     .catch(() => {})
@@ -468,6 +735,7 @@ const deleteEval = (id) => {
 }
 
 onMounted(() => {
+  fetchDashboardConfig()
   fetchUsers()
   fetchKBs()
   fetchEvals()
@@ -480,6 +748,68 @@ onMounted(() => {
   background: #ffffff;
   border: 1px solid #f2f3f5;
   border-radius: 8px;
+}
+
+.dashboard-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-header,
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-header h2,
+.dashboard-header p,
+.pane-card h3,
+.pane-card h4 {
+  margin: 0;
+}
+
+.dashboard-header p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.param-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 82px;
+  padding: 14px;
+  background: #f7f9fc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.param-card span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.param-card strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  color: #1d2129;
+}
+
+.dashboard-two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
 }
 
 .filter-wrapper {
@@ -576,6 +906,20 @@ onMounted(() => {
 .two-column {
   display: flex;
   gap: 20px;
+}
+
+.three-column,
+.four-column {
+  display: grid;
+  gap: 16px;
+}
+
+.three-column {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.four-column {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .upload-drag {

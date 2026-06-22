@@ -7,6 +7,10 @@
       </div>
 
       <el-menu :default-active="activeMenu" class="custom-el-menu" @select="handleMenuSelect">
+        <el-menu-item index="dashboard">
+          <el-icon><Setting /></el-icon>
+          <span>仪表台参数</span>
+        </el-menu-item>
         <el-menu-item index="users">
           <el-icon><User /></el-icon>
           <span>用户管理</span>
@@ -45,12 +49,13 @@
 
 <script setup>
 import { ref } from 'vue'
-import { DataAnalysis, FolderOpened, User } from '@element-plus/icons-vue'
+import { DataAnalysis, FolderOpened, Setting, User } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['menu-change'])
 
-const activeMenu = ref('users')
+const activeMenu = ref('dashboard')
 const menuTitleMap = {
+  dashboard: '仪表台参数',
   users: '用户管理',
   knowledge: '知识库管理',
   evaluations: '评估管理'

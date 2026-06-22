@@ -53,6 +53,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
+import { login } from '@/api/auth'
 
 const router = useRouter()
 const loginFormRef = ref(null)
@@ -69,6 +70,16 @@ const rules = {
   password: [{ required: true, message: '密码不能为空', trigger: 'blur' }]
 }
 
+const knowledgeBaseMap = {
+  merchant: { type: 'enterprise', name: '企业知识库' },
+  enterprise: { type: 'enterprise', name: '企业知识库' },
+  individual: { type: 'personal', name: '个人知识库' },
+  personal: { type: 'personal', name: '个人知识库' },
+  admin: { type: 'enterprise', name: '企业知识库' }
+}
+
+const resolveKnowledgeBase = (category) => knowledgeBaseMap[category] || { type: '', name: '' }
+
 const handleLogin = async () => {
   if (!loginFormRef.value) return
 
@@ -77,27 +88,32 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    const mockResponse = {
-      code: 200,
-      message: '登录成功',
-      data: {
-        token: 'mock-token',
-        user: {
-          id: 1,
-          username: loginForm.username,
-          nickname: loginForm.role === 'admin' ? '管理员' : '普通用户',
-          role: loginForm.role
-        }
-      }
+    const data = await login({
+      username: loginForm.username,
+      password: loginForm.password,
+      login_type: loginForm.role
+    })
+    const roleCodes = (data.user?.roles || []).map((role) => role.code)
+    const knowledgeBase = resolveKnowledgeBase(data.user?.category)
+
+    localStorage.setItem('token', data.access_token)
+    localStorage.setItem('userInfo', JSON.stringify(data.user))
+    localStorage.setItem('roles', JSON.stringify(roleCodes))
+    localStorage.setItem('knowledge_base_type', knowledgeBase.type)
+    localStorage.setItem('knowledge_base_name', knowledgeBase.name)
+
+    ElMessage.success('登录成功')
+    if (!knowledgeBase.type && !roleCodes.includes('admin')) {
+      ElMessage.warning('账号知识库类型未配置')
+      return
     }
-
-    ElMessage.success(mockResponse.message)
-    localStorage.setItem('token', mockResponse.data.token)
-    localStorage.setItem('userInfo', JSON.stringify(mockResponse.data.user))
-
-    router.push(mockResponse.data.user.role === 'admin' ? '/admin' : '/user-chat')
+    router.push(roleCodes.includes('admin') ? '/admin' : '/user-chat')
   } catch (error) {
-    ElMessage.error('登录失败，请检查网络或凭证')
+    if (error.code === 40300 || error.message === 'admin role required') {
+      ElMessage.error('当前账号不是管理员，请切换普通用户登录')
+      return
+    }
+    ElMessage.error(error.message || '登录失败，请检查网络或凭证')
   } finally {
     loading.value = false
   }

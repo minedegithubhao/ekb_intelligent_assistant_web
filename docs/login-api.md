@@ -1,4 +1,4 @@
-﻿# 登录接口文档
+# 登录接口文档
 
 ## 基本信息
 
@@ -14,17 +14,17 @@
 
 | 参数名 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `username` | `string` | 是 | 用户名、手机号或邮箱 |
-| `password` | `string` | 是 | 登录密码 |
-| `role` | `string` | 否 | 登录身份，可选值：`user`、`admin` |
+| `username` | `string` | 是 | 登录账号 |
+| `password` | `string` | 是 | 登录密码，当前后端使用 `pbkdf2_sha256` 校验 |
+| `login_type` | `string` | 否 | 登录端类型，可选：`user`、`admin` |
 
 ## 请求示例
 
 ```json
 {
   "username": "admin",
-  "password": "123456",
-  "role": "admin"
+  "password": "Admin@123456",
+  "login_type": "admin"
 }
 ```
 
@@ -32,82 +32,60 @@
 
 ```json
 {
-  "code": 200,
-  "message": "登录成功",
+  "code": 0,
+  "message": "success",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    "access_token": "jwt-token",
+    "token_type": "bearer",
+    "expires_at": "2026-06-22T03:06:56.823404Z",
     "user": {
       "id": 1,
       "username": "admin",
-      "nickname": "管理员",
-      "role": "admin"
+      "name": "系统管理员",
+      "display_name": "系统管理员",
+      "email": "admin@example.com",
+      "department": "平台运营部",
+      "category": "admin",
+      "user_type": "admin",
+      "roles": [
+        {
+          "code": "admin",
+          "name": "管理员"
+        }
+      ],
+      "question_categories": ["enterprise_shop", "individual_shop"],
+      "question_category_names": ["企业店规则", "个人个体店规则"]
     }
   }
 }
 ```
 
-## 响应字段说明
+## 前端处理
 
-| 字段名 | 类型 | 说明 |
-| --- | --- | --- |
-| `code` | `number` | 业务状态码，`200` 表示成功 |
-| `message` | `string` | 响应提示信息 |
-| `data.token` | `string` | 登录凭证，前端需要保存并在后续请求中携带 |
-| `data.user.id` | `number` | 用户 ID |
-| `data.user.username` | `string` | 用户名 |
-| `data.user.nickname` | `string` | 用户昵称 |
-| `data.user.role` | `string` | 用户身份，`user` 表示普通用户，`admin` 表示管理员 |
+登录成功后保存：
 
-## 失败响应
-
-### 参数缺失
-
-```json
-{
-  "code": 400,
-  "message": "用户名或密码不能为空",
-  "data": null
-}
+```text
+localStorage.token = data.access_token
+localStorage.userInfo = JSON.stringify(data.user)
+localStorage.roles = JSON.stringify(data.user.roles.map(item => item.code))
 ```
 
-### 用户名或密码错误
-
-```json
-{
-  "code": 401,
-  "message": "用户名或密码错误",
-  "data": null
-}
-```
-
-### 账号被禁用
-
-```json
-{
-  "code": 403,
-  "message": "账号已被禁用，请联系管理员",
-  "data": null
-}
-```
-
-## 前端处理建议
-
-1. 登录成功后保存 `token` 和用户信息。
-2. 后续接口请求在请求头中携带：
+后续接口请求头携带：
 
 ```http
 Authorization: Bearer <token>
 ```
 
-3. 根据 `user.role` 判断跳转页面：
+普通用户跳转 `/user-chat`，管理员跳转 `/admin`。
 
-| 角色 | 跳转页面 |
-| --- | --- |
-| `user` | `/user-chat` |
-| `admin` | `/admin` |
+## 失败响应示例
 
-4. 登录失败时直接展示后端返回的 `message`。
+```json
+{
+  "code": 40300,
+  "message": "admin role required",
+  "data": {}
+}
+```
 
-## 备注
-
-当前文档为前后端对接约定版本，后续以后端实际接口为准。
+更多接口见 [完整接口文档](api.md)。

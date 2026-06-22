@@ -313,6 +313,7 @@
         </div>
         <div class="eval-actions">
           <el-button @click="resetEvalFilter">重置筛选</el-button>
+          <el-button type="success" plain @click="evalReportVisible = true">评估报告</el-button>
           <el-button type="primary" plain @click="saveCurrentEval">保存当前样本</el-button>
           <el-button type="primary" @click="batchSubmitEval">批量提交</el-button>
         </div>
@@ -329,6 +330,66 @@
         </el-select>
         <el-input v-model="evalQuery.keyword" placeholder="搜索问题、样本ID、店铺" clearable class="eval-keyword" />
       </div>
+
+
+      <el-dialog v-model="evalReportVisible" title="评估报告" width="980px" class="eval-report-dialog">
+        <section class="eval-report-panel">
+        <div class="eval-report-head">
+          <div>
+            <h3>评估报告</h3>
+            <p>基于当前 Mock 评测样本自动汇总，用于快速查看整体质量与问题分布。</p>
+          </div>
+          <el-tag type="primary" effect="plain">{{ evalReportSummary.taskId }}</el-tag>
+        </div>
+
+        <div class="eval-report-kpis">
+          <div class="eval-report-kpi">
+            <span>样本总数</span>
+            <strong>{{ evalReportSummary.totalSamples }}</strong>
+          </div>
+          <div class="eval-report-kpi">
+            <span>已提交</span>
+            <strong>{{ evalReportSummary.submittedSamples }}</strong>
+          </div>
+          <div class="eval-report-kpi">
+            <span>平均分</span>
+            <strong>{{ evalReportSummary.averageScore }}</strong>
+          </div>
+          <div class="eval-report-kpi warning">
+            <span>低分样本</span>
+            <strong>{{ evalReportSummary.lowScoreSamples }}</strong>
+          </div>
+        </div>
+
+        <div class="eval-report-grid">
+          <div class="eval-report-block">
+            <h4>五项指标均分</h4>
+            <div v-for="metric in evalReportSummary.metricAverages" :key="metric.key" class="report-progress-row">
+              <span>{{ metric.label }}</span>
+              <el-progress :percentage="metric.percent" :stroke-width="8" :show-text="false" />
+              <em>{{ metric.value }}</em>
+            </div>
+          </div>
+          <div class="eval-report-block">
+            <h4>缺陷标签分布</h4>
+            <div v-if="evalReportSummary.defectStats.length" class="report-tag-list">
+              <el-tag v-for="item in evalReportSummary.defectStats" :key="item.tag" effect="plain" type="warning">
+                {{ item.tag }} · {{ item.count }}
+              </el-tag>
+            </div>
+            <el-empty v-else description="暂无缺陷标签" :image-size="64" />
+          </div>
+          <div class="eval-report-block">
+            <h4>场景通过率</h4>
+            <div v-for="scene in evalReportSummary.sceneStats" :key="scene.scene" class="scene-stat-row">
+              <span>{{ scene.scene }}</span>
+              <strong>{{ scene.passRate }}%</strong>
+              <small>{{ scene.passed }}/{{ scene.total }}</small>
+            </div>
+          </div>
+        </div>
+        </section>
+      </el-dialog>
 
       <div class="eval-workspace">
         <aside class="eval-sample-list pane-card">
@@ -451,6 +512,89 @@
       </div>
     </section>
 
+
+
+    <section v-if="currentTab === 'testsets'" class="testset-management-section">
+      <el-card shadow="never" class="testset-card">
+        <template #header>
+          <div class="testset-card-header">
+            <div>
+              <h3>测试集管理</h3>
+              <p>维护电商 RAG 评测测试集，使用本地 Mock 数据。</p>
+            </div>
+            <el-button type="primary" @click="openTestSetDialog('add')">新增测试集</el-button>
+          </div>
+        </template>
+
+        <div class="testset-toolbar">
+          <el-input
+            v-model="testSetKeyword"
+            placeholder="按测试集名称搜索"
+            class="testset-search"
+            clearable
+          />
+          <el-button type="primary" plain @click="testSetPage = 1">搜索</el-button>
+        </div>
+
+        <el-table :data="pagedTestSetList" border stripe style="width: 100%">
+          <el-table-column prop="id" label="ID" width="120" />
+          <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="description" label="描述" min-width="260" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === 'enabled' ? 'success' : 'info'" effect="plain">
+                {{ scope.row.status === 'enabled' ? '启用' : '禁用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="caseCount" label="用例数" width="100" align="center" />
+          <el-table-column prop="createdAt" label="创建时间" width="180" />
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click="openTestSetDialog('edit', scope.row)">编辑</el-button>
+              <el-button link type="danger" @click="deleteTestSet(scope.row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="testset-pagination">
+          <el-pagination
+            v-model:current-page="testSetPage"
+            v-model:page-size="testSetPageSize"
+            background
+            layout="total, sizes, prev, pager, next"
+            :page-sizes="[5, 10, 20]"
+            :total="filteredTestSetList.length"
+          />
+        </div>
+      </el-card>
+
+      <el-dialog
+        v-model="testSetDialogVisible"
+        :title="testSetDialogType === 'add' ? '新增测试集' : '编辑测试集'"
+        width="520px"
+      >
+        <el-form ref="testSetFormRef" :model="testSetForm" :rules="testSetRules" label-position="top">
+          <el-form-item label="名称" prop="name">
+            <el-input v-model="testSetForm.name" placeholder="请输入测试集名称" />
+          </el-form-item>
+          <el-form-item label="描述" prop="description">
+            <el-input v-model="testSetForm.description" type="textarea" :rows="3" placeholder="请输入测试集描述" />
+          </el-form-item>
+          <el-form-item label="状态" prop="status">
+            <el-radio-group v-model="testSetForm.status">
+              <el-radio value="enabled">启用</el-radio>
+              <el-radio value="disabled">禁用</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="testSetDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitTestSetForm">保存</el-button>
+        </template>
+      </el-dialog>
+    </section>
+
     <el-dialog v-model="userModalVisible" :title="userModalType === 'add' ? '新增用户' : '修改用户信息'" width="480px">
       <el-form :model="userForm" label-position="top">
         <el-form-item v-if="userModalType === 'add'" label="用户账号">
@@ -548,6 +692,108 @@
         <el-button type="primary" @click="submitCreateEval">提交任务</el-button>
       </template>
     </el-dialog>
+
+
+    <section v-if="currentTab === 'sessionAudit'" class="session-audit-management">
+      <el-card shadow="never" class="session-audit-card">
+        <template #header>
+          <div class="session-audit-header">
+            <div>
+              <h3>后台会话审计管理</h3>
+              <p>零依赖纯前端 Mock 展示，用于快速核对会话审计需求和交互效果。</p>
+            </div>
+            <div class="session-audit-actions">
+              <el-button @click="exportSelectedSessions">批量导出</el-button>
+              <el-button type="danger" plain @click="deleteSelectedSessions">批量删除</el-button>
+            </div>
+          </div>
+        </template>
+
+        <div class="session-audit-filter">
+          <el-input v-model="sessionAuditKeyword" placeholder="搜索标题、用户ID或消息内容" clearable class="session-audit-keyword" />
+          <el-date-picker
+            v-model="sessionAuditDateRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="创建开始时间"
+            end-placeholder="创建结束时间"
+          />
+          <el-select v-model="sessionAuditStatus" placeholder="会话状态" clearable>
+            <el-option label="活跃" value="active" />
+            <el-option label="关闭" value="closed" />
+          </el-select>
+          <el-button @click="resetSessionAuditFilters">重置</el-button>
+        </div>
+
+        <el-table
+          :data="pagedSessionAuditList"
+          border
+          stripe
+          style="width: 100%"
+          @selection-change="handleSessionAuditSelection"
+          @row-click="openSessionDetail"
+        >
+          <el-table-column type="selection" width="48" />
+          <el-table-column prop="sessionId" label="会话ID" width="150" />
+          <el-table-column prop="userName" label="用户名称" width="130" />
+          <el-table-column prop="userId" label="用户ID" width="130" />
+          <el-table-column prop="title" label="会话标题" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="messageCount" label="消息数" width="90" align="center" />
+          <el-table-column prop="status" label="状态" width="96">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === 'active' ? 'success' : 'info'" effect="plain">
+                {{ scope.row.status === 'active' ? '活跃' : '关闭' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="创建时间" width="180" />
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click.stop="openSessionDetail(scope.row)">查看详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="session-audit-pagination">
+          <el-pagination
+            v-model:current-page="sessionAuditPage"
+            v-model:page-size="sessionAuditPageSize"
+            background
+            layout="total, sizes, prev, pager, next"
+            :page-sizes="[5, 10, 15]"
+            :total="filteredSessionAuditList.length"
+          />
+        </div>
+      </el-card>
+
+      <el-drawer v-model="sessionDetailVisible" size="720px" title="会话上下文详情">
+        <template v-if="activeSessionDetail">
+          <div class="session-detail-summary">
+            <h3>{{ activeSessionDetail.title }}</h3>
+            <p>{{ activeSessionDetail.sessionId }} · {{ activeSessionDetail.userName }} · {{ activeSessionDetail.createdAt }}</p>
+            <el-tag :type="activeSessionDetail.status === 'active' ? 'success' : 'info'" effect="plain">
+              {{ activeSessionDetail.status === 'active' ? '活跃' : '关闭' }}
+            </el-tag>
+          </div>
+          <div class="session-message-flow">
+            <div
+              v-for="message in activeSessionDetail.messages"
+              :key="message.timestamp + message.role + message.content"
+              class="session-message"
+              :class="message.role"
+            >
+              <div class="message-meta">
+                <span>{{ message.role === 'user' ? '用户提问' : 'AI回答' }}</span>
+                <time>{{ message.timestamp }}</time>
+              </div>
+              <p>{{ message.content }}</p>
+              <el-button size="small" text type="primary" @click="copySessionMessage(message.content)">复制</el-button>
+            </div>
+          </div>
+        </template>
+      </el-drawer>
+    </section>
+
   </AdminLayout>
 </template>
 
@@ -821,6 +1067,7 @@ const selectedEvalSampleIds = ref([])
 const activeEvalSampleId = ref('')
 const evalErrors = reactive({})
 const createEvalVisible = ref(false)
+const evalReportVisible = ref(false)
 const newEvalForm = reactive({ name: '', knowledgeBaseId: '', metrics: [] })
 const evalDetail = ref({})
 const activeEvalId = ref(null)
@@ -969,6 +1216,55 @@ const evalSamples = ref([
   }
 ])
 
+
+
+const getEvalSampleAverage = (sample) => {
+  const values = evalScoreMetrics
+    .map((metric) => Number(sample.scores[metric.key]))
+    .filter((value) => Number.isFinite(value))
+  if (!values.length) return null
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1))
+}
+
+const evalReportSummary = computed(() => {
+  const scoredSamples = evalSamples.value.filter((sample) => getEvalSampleAverage(sample) !== null)
+  const averageScore = scoredSamples.length
+    ? (scoredSamples.reduce((sum, sample) => sum + getEvalSampleAverage(sample), 0) / scoredSamples.length).toFixed(1)
+    : '-'
+  const metricAverages = evalScoreMetrics.map((metric) => {
+    const values = evalSamples.value
+      .map((sample) => Number(sample.scores[metric.key]))
+      .filter((value) => Number.isFinite(value))
+    const value = values.length ? Number((values.reduce((sum, item) => sum + item, 0) / values.length).toFixed(1)) : 0
+    return { ...metric, value: values.length ? value : '-', percent: Math.round(value * 10) }
+  })
+  const defectMap = evalSamples.value.reduce((map, sample) => {
+    sample.defectTags.forEach((tag) => map.set(tag, (map.get(tag) || 0) + 1))
+    return map
+  }, new Map())
+  const sceneMap = evalSamples.value.reduce((map, sample) => {
+    const current = map.get(sample.scene) || { scene: sample.scene, total: 0, passed: 0 }
+    const sampleAverage = getEvalSampleAverage(sample)
+    current.total += 1
+    if (sampleAverage !== null && sampleAverage >= 7) current.passed += 1
+    map.set(sample.scene, current)
+    return map
+  }, new Map())
+  return {
+    taskId: 'eval_ec_20260622',
+    totalSamples: evalSamples.value.length,
+    submittedSamples: evalSamples.value.filter((sample) => sample.status === 'submitted').length,
+    averageScore,
+    lowScoreSamples: scoredSamples.filter((sample) => getEvalSampleAverage(sample) < 7).length,
+    metricAverages,
+    defectStats: Array.from(defectMap.entries()).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count),
+    sceneStats: Array.from(sceneMap.values()).map((item) => ({
+      ...item,
+      passRate: item.total ? Math.round((item.passed / item.total) * 100) : 0
+    }))
+  }
+})
+
 const evalSceneOptions = computed(() => Array.from(new Set(evalSamples.value.map((sample) => sample.scene))))
 const filteredEvalSamples = computed(() => {
   const keyword = evalQuery.keyword.trim().toLowerCase()
@@ -1084,6 +1380,385 @@ const deleteEval = (id) => {
   ElMessage.success('评估任务 ' + id + ' 已删除')
 }
 
+
+
+const testSetKeyword = ref('')
+const testSetPage = ref(1)
+const testSetPageSize = ref(5)
+const testSetDialogVisible = ref(false)
+const testSetDialogType = ref('add')
+const testSetFormRef = ref(null)
+const testSetForm = reactive({ id: '', name: '', description: '', status: 'enabled' })
+const testSetRules = {
+  name: [{ required: true, message: '请输入测试集名称', trigger: 'blur' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+}
+const testSetList = ref([
+  {
+    id: 'ts_ec_001',
+    name: '售后退换货核心测试集',
+    description: '覆盖七天无理由、质量问题、破损漏液、人工复核等售后场景。',
+    status: 'enabled',
+    caseCount: 36,
+    createdAt: '2026-06-20 09:30:00'
+  },
+  {
+    id: 'ts_ec_002',
+    name: '促销优惠券问答测试集',
+    description: '验证满减券、会员券、平台券叠加和价格承诺风险回答。',
+    status: 'enabled',
+    caseCount: 28,
+    createdAt: '2026-06-20 14:12:00'
+  },
+  {
+    id: 'ts_ec_003',
+    name: '物流时效与偏远地区测试集',
+    description: '用于评估发货承诺、预计送达、偏远地区延迟说明的准确性。',
+    status: 'disabled',
+    caseCount: 18,
+    createdAt: '2026-06-21 10:08:00'
+  },
+  {
+    id: 'ts_ec_004',
+    name: '商品参数与材质测试集',
+    description: '覆盖规格、材质、保养方式、适用人群等商品详情问答。',
+    status: 'enabled',
+    caseCount: 42,
+    createdAt: '2026-06-21 16:45:00'
+  },
+  {
+    id: 'ts_ec_005',
+    name: '发票售后测试集',
+    description: '验证发票抬头修改、红冲重开、确认收货后开票等财务规则。',
+    status: 'enabled',
+    caseCount: 15,
+    createdAt: '2026-06-22 09:05:00'
+  },
+  {
+    id: 'ts_ec_006',
+    name: '客服安全合规测试集',
+    description: '识别过度承诺、价格误导、应转人工未转等高风险客服回复。',
+    status: 'disabled',
+    caseCount: 24,
+    createdAt: '2026-06-22 11:20:00'
+  }
+])
+const filteredTestSetList = computed(() => {
+  const keyword = testSetKeyword.value.trim().toLowerCase()
+  if (!keyword) return testSetList.value
+  return testSetList.value.filter((item) => item.name.toLowerCase().includes(keyword))
+})
+const pagedTestSetList = computed(() => {
+  const start = (testSetPage.value - 1) * testSetPageSize.value
+  return filteredTestSetList.value.slice(start, start + testSetPageSize.value)
+})
+
+const openTestSetDialog = (type, row = null) => {
+  testSetDialogType.value = type
+  testSetDialogVisible.value = true
+  if (row) {
+    Object.assign(testSetForm, row)
+    return
+  }
+  Object.assign(testSetForm, { id: '', name: '', description: '', status: 'enabled' })
+}
+
+const submitTestSetForm = async () => {
+  const valid = await testSetFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  if (testSetDialogType.value === 'edit') {
+    const target = testSetList.value.find((item) => item.id === testSetForm.id)
+    if (target) {
+      Object.assign(target, {
+        name: testSetForm.name,
+        description: testSetForm.description,
+        status: testSetForm.status
+      })
+    }
+    ElMessage.success('测试集已更新')
+  } else {
+    testSetList.value.unshift({
+      id: 'ts_ec_' + String(Date.now()).slice(-6),
+      name: testSetForm.name,
+      description: testSetForm.description,
+      status: testSetForm.status,
+      caseCount: 0,
+      createdAt: new Date().toLocaleString('zh-CN', { hour12: false }).replaceAll('/', '-')
+    })
+    testSetPage.value = 1
+    ElMessage.success('测试集已新增')
+  }
+  testSetDialogVisible.value = false
+}
+
+const deleteTestSet = (row) => {
+  ElMessageBox.confirm('确定删除测试集“' + row.name + '”吗？', '删除确认', { type: 'warning' })
+    .then(() => {
+      testSetList.value = testSetList.value.filter((item) => item.id !== row.id)
+      ElMessage.success('测试集已删除')
+    })
+    .catch(() => {})
+}
+
+
+/**
+ * @typedef {'user' | 'assistant'} MessageRole
+ * @typedef {Object} Message
+ * @property {MessageRole} role 发送方角色，仅用于区分用户提问和AI回答。
+ * @property {string} content 消息正文。
+ * @property {string} timestamp 消息发送时间。
+ *
+ * @typedef {'active' | 'closed'} SessionStatus
+ * @typedef {Object} Session
+ * @property {string} sessionId 会话ID。
+ * @property {string} userId 用户ID。
+ * @property {string} userName 用户名称。
+ * @property {string} title 会话标题。
+ * @property {number} messageCount 消息总数。
+ * @property {string} createdAt 创建时间。
+ * @property {SessionStatus} status 会话状态。
+ * @property {Message[]} messages 完整上下文消息流。
+ */
+
+// 纯前端 Mock 数据源：不调用后端接口，所有审计、过滤、删除仅作用于本地数组。
+const SESSION_AUDIT_MOCK_SESSIONS = [
+  {
+    sessionId: 'sess_20260622_001', userId: 'u_10001', userName: '李想辰', title: '订单发货时效咨询', status: 'active', createdAt: '2026-06-22 09:12:00',
+    messages: [
+      { role: 'user', content: '我昨天买的电饭煲今天能发货吗？', timestamp: '2026-06-22 09:12:10' },
+      { role: 'assistant', content: '您好，当前订单预计在48小时内完成出库，您可以在订单详情查看物流更新。', timestamp: '2026-06-22 09:12:18' },
+      { role: 'user', content: '我明天要用，能加急吗？', timestamp: '2026-06-22 09:12:45' },
+      { role: 'assistant', content: '可以为您备注加急诉求，但实际发货仍以仓库处理进度为准。', timestamp: '2026-06-22 09:12:51' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_002', userId: 'u_10002', userName: '张敏', title: '优惠券叠加规则', status: 'closed', createdAt: '2026-06-22 09:35:00',
+    messages: [
+      { role: 'user', content: '618满减券能和会员券一起用吗？', timestamp: '2026-06-22 09:35:03' },
+      { role: 'assistant', content: '平台满减券通常可与店铺会员券叠加，但需满足商品范围和门槛限制。', timestamp: '2026-06-22 09:35:09' },
+      { role: 'user', content: '为什么我的结算页没有叠加？', timestamp: '2026-06-22 09:35:27' },
+      { role: 'assistant', content: '建议核对商品是否参与会员券、券是否同类型互斥，以及订单金额是否满足门槛。', timestamp: '2026-06-22 09:35:34' },
+      { role: 'user', content: '那我可以先付款再退差价吗？', timestamp: '2026-06-22 09:36:02' },
+      { role: 'assistant', content: '暂不建议承诺退差价，请以结算页实际优惠为准；如页面异常可联系人工客服核实。', timestamp: '2026-06-22 09:36:10' },
+      { role: 'user', content: '人工客服在哪里？', timestamp: '2026-06-22 09:36:30' },
+      { role: 'assistant', content: '您可以在当前会话输入“转人工”，我会为您提交人工客服处理。', timestamp: '2026-06-22 09:36:37' },
+      { role: 'user', content: '转人工', timestamp: '2026-06-22 09:36:46' },
+      { role: 'assistant', content: '已为您提交人工客服，请保持页面打开。', timestamp: '2026-06-22 09:36:51' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_003', userId: 'u_10003', userName: '王可', title: '七天无理由退货', status: 'active', createdAt: '2026-06-22 10:05:00',
+    messages: [
+      { role: 'user', content: '拆封试用后还能七天无理由退货吗？', timestamp: '2026-06-22 10:05:06' },
+      { role: 'assistant', content: '如商品已影响二次销售，通常不支持七天无理由退货；质量问题可申请售后检测。', timestamp: '2026-06-22 10:05:13' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_004', userId: 'u_10004', userName: '赵磊', title: '新疆物流预计送达', status: 'closed', createdAt: '2026-06-22 10:28:00',
+    messages: [
+      { role: 'user', content: '新疆订单页面写48小时发货，是48小时到吗？', timestamp: '2026-06-22 10:28:11' },
+      { role: 'assistant', content: '48小时发货表示商家交付承运商，不等同于48小时送达。', timestamp: '2026-06-22 10:28:19' },
+      { role: 'user', content: '那大概几天到？', timestamp: '2026-06-22 10:28:40' },
+      { role: 'assistant', content: '新疆地区通常发货后5-8天送达，具体以物流轨迹为准。', timestamp: '2026-06-22 10:28:48' },
+      { role: 'user', content: '如果延迟怎么办？', timestamp: '2026-06-22 10:29:03' },
+      { role: 'assistant', content: '如超过预计时效仍无更新，可联系人工客服协助催促承运商。', timestamp: '2026-06-22 10:29:12' },
+      { role: 'user', content: '可以赔偿吗？', timestamp: '2026-06-22 10:29:28' },
+      { role: 'assistant', content: '赔付需结合平台规则和实际延迟原因核实，暂不能直接承诺。', timestamp: '2026-06-22 10:29:37' },
+      { role: 'user', content: '帮我记录一下', timestamp: '2026-06-22 10:29:55' },
+      { role: 'assistant', content: '已记录您的诉求，建议后续关注物流轨迹。', timestamp: '2026-06-22 10:30:02' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_005', userId: 'u_10005', userName: '陈诺', title: '发票抬头修改', status: 'active', createdAt: '2026-06-22 11:02:00',
+    messages: [
+      { role: 'user', content: '确认收货后还能改公司发票抬头吗？', timestamp: '2026-06-22 11:02:08' },
+      { role: 'assistant', content: '若发票未开具可修改；若已开具，需要申请作废或红冲后重开。', timestamp: '2026-06-22 11:02:17' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_006', userId: 'u_10006', userName: '刘洋', title: '保温杯材质确认', status: 'closed', createdAt: '2026-06-22 11:40:00',
+    messages: [
+      { role: 'user', content: '儿童保温杯是不是316不锈钢？', timestamp: '2026-06-22 11:40:04' },
+      { role: 'assistant', content: '杯体内胆为316L不锈钢，杯盖含PP与硅胶密封圈。', timestamp: '2026-06-22 11:40:11' },
+      { role: 'user', content: '能放洗碗机吗？', timestamp: '2026-06-22 11:40:20' },
+      { role: 'assistant', content: '建议手洗，不建议整杯放入洗碗机，以免影响密封圈寿命。', timestamp: '2026-06-22 11:40:28' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_007', userId: 'u_10007', userName: '孙佳', title: '护肤品漏液赔付', status: 'active', createdAt: '2026-06-22 12:18:00',
+    messages: [
+      { role: 'user', content: '收到护肤品瓶口漏液，拆包装了还能赔吗？', timestamp: '2026-06-22 12:18:07' },
+      { role: 'assistant', content: '拆包装不必然影响售后，请在48小时内提交外包装、商品漏液照片和快递面单。', timestamp: '2026-06-22 12:18:16' },
+      { role: 'user', content: '我只有商品照片可以吗？', timestamp: '2026-06-22 12:18:36' },
+      { role: 'assistant', content: '建议补充外包装和面单照片，便于核实物流或包装问题。', timestamp: '2026-06-22 12:18:43' },
+      { role: 'user', content: '大概怎么处理？', timestamp: '2026-06-22 12:19:02' },
+      { role: 'assistant', content: '核实后可能提供补发、退款或补偿方案，具体以人工审核结果为准。', timestamp: '2026-06-22 12:19:10' },
+      { role: 'user', content: '那帮我转人工', timestamp: '2026-06-22 12:19:31' },
+      { role: 'assistant', content: '已为您转人工，请上传相关凭证。', timestamp: '2026-06-22 12:19:38' },
+      { role: 'user', content: '好的', timestamp: '2026-06-22 12:20:00' },
+      { role: 'assistant', content: '感谢配合，客服会尽快处理。', timestamp: '2026-06-22 12:20:05' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_008', userId: 'u_10008', userName: '周航', title: '尺码推荐咨询', status: 'closed', createdAt: '2026-06-22 13:05:00',
+    messages: [
+      { role: 'user', content: '身高170体重65，夹克选什么码？', timestamp: '2026-06-22 13:05:09' },
+      { role: 'assistant', content: '建议参考尺码表，常规版型可优先选择L码，如喜欢宽松可选XL。', timestamp: '2026-06-22 13:05:16' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_009', userId: 'u_10009', userName: '吴笛', title: '会员积分抵扣', status: 'active', createdAt: '2026-06-22 13:44:00',
+    messages: [
+      { role: 'user', content: '会员积分能抵扣运费吗？', timestamp: '2026-06-22 13:44:01' },
+      { role: 'assistant', content: '积分通常仅可抵扣商品金额，不支持抵扣运费，具体以结算页展示为准。', timestamp: '2026-06-22 13:44:09' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_010', userId: 'u_10010', userName: '郑然', title: '预售尾款提醒', status: 'closed', createdAt: '2026-06-22 14:20:00',
+    messages: [
+      { role: 'user', content: '预售尾款什么时候付？', timestamp: '2026-06-22 14:20:06' },
+      { role: 'assistant', content: '尾款支付时间请以商品详情页和订单页展示为准，系统也会在支付期内提醒。', timestamp: '2026-06-22 14:20:13' },
+      { role: 'user', content: '错过了怎么办？', timestamp: '2026-06-22 14:20:30' },
+      { role: 'assistant', content: '错过尾款期可能导致订单关闭，建议关注订单页提示。', timestamp: '2026-06-22 14:20:37' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_011', userId: 'u_10011', userName: '何溪', title: '价格保护申请', status: 'active', createdAt: '2026-06-22 15:03:00',
+    messages: [
+      { role: 'user', content: '刚买完就降价了，能价保吗？', timestamp: '2026-06-22 15:03:06' },
+      { role: 'assistant', content: '是否支持价保需看商品是否参加价保服务及申请时间，您可在订单页查看价保入口。', timestamp: '2026-06-22 15:03:13' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_012', userId: 'u_10012', userName: '唐予', title: '赠品漏发处理', status: 'closed', createdAt: '2026-06-22 15:48:00',
+    messages: [
+      { role: 'user', content: '订单里说有赠品，但我没收到。', timestamp: '2026-06-22 15:48:04' },
+      { role: 'assistant', content: '请先核对活动规则和订单明细，若满足赠品条件可提供开箱照片和订单号核实。', timestamp: '2026-06-22 15:48:12' },
+      { role: 'user', content: '我有订单截图。', timestamp: '2026-06-22 15:48:29' },
+      { role: 'assistant', content: '可以上传订单截图和包裹照片，我们会为您核查是否漏发。', timestamp: '2026-06-22 15:48:36' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_013', userId: 'u_10013', userName: '罗宁', title: '安装服务预约', status: 'active', createdAt: '2026-06-22 16:12:00',
+    messages: [
+      { role: 'user', content: '洗碗机送到后怎么预约安装？', timestamp: '2026-06-22 16:12:02' },
+      { role: 'assistant', content: '您可在订单详情中点击预约安装，也可联系客服提供地址和可安装时间。', timestamp: '2026-06-22 16:12:10' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_014', userId: 'u_10014', userName: '马骁', title: '跨店满减退款影响', status: 'closed', createdAt: '2026-06-22 16:55:00',
+    messages: [
+      { role: 'user', content: '跨店满减订单退一件，会影响其他商品优惠吗？', timestamp: '2026-06-22 16:55:06' },
+      { role: 'assistant', content: '退款后若订单不再满足满减门槛，系统可能按比例扣回优惠，具体以退款页计算为准。', timestamp: '2026-06-22 16:55:14' },
+      { role: 'user', content: '那我实际退多少钱？', timestamp: '2026-06-22 16:55:31' },
+      { role: 'assistant', content: '请以退款申请页展示金额为准，系统会自动计算优惠分摊。', timestamp: '2026-06-22 16:55:38' }
+    ]
+  },
+  {
+    sessionId: 'sess_20260622_015', userId: 'u_10015', userName: '林澈', title: '企业采购开票与配送', status: 'active', createdAt: '2026-06-22 17:30:00',
+    messages: [
+      { role: 'user', content: '企业采购能不能开专票？', timestamp: '2026-06-22 17:30:05' },
+      { role: 'assistant', content: '支持开具专票的商品可在开票页面选择增值税专用发票，并填写企业资质。', timestamp: '2026-06-22 17:30:13' },
+      { role: 'user', content: '可以分批配送吗？', timestamp: '2026-06-22 17:30:40' },
+      { role: 'assistant', content: '是否支持分批配送取决于仓库库存和订单拆分规则，建议下单前联系人工确认。', timestamp: '2026-06-22 17:30:48' },
+      { role: 'user', content: '专票多久能开？', timestamp: '2026-06-22 17:31:10' },
+      { role: 'assistant', content: '通常在订单完成后按财务审核进度开具，具体时效以开票页面提示为准。', timestamp: '2026-06-22 17:31:18' },
+      { role: 'user', content: '能先发票后付款吗？', timestamp: '2026-06-22 17:31:42' },
+      { role: 'assistant', content: '平台订单通常需先完成支付，账期采购需确认是否开通企业采购协议。', timestamp: '2026-06-22 17:31:50' },
+      { role: 'user', content: '那帮我转企业客服。', timestamp: '2026-06-22 17:32:11' },
+      { role: 'assistant', content: '已为您转接企业采购客服，请准备公司名称和采购清单。', timestamp: '2026-06-22 17:32:19' },
+      { role: 'user', content: '谢谢。', timestamp: '2026-06-22 17:32:41' },
+      { role: 'assistant', content: '不客气，祝您采购顺利。', timestamp: '2026-06-22 17:32:48' }
+    ]
+  }
+].map((session) => ({ ...session, messageCount: session.messages.length }))
+
+const sessionAuditKeyword = ref('')
+const sessionAuditStatus = ref('')
+const sessionAuditDateRange = ref([])
+const sessionAuditPage = ref(1)
+const sessionAuditPageSize = ref(5)
+const sessionDetailVisible = ref(false)
+const activeSessionDetail = ref(null)
+const selectedSessionIds = ref([])
+const sessionAuditList = ref([...SESSION_AUDIT_MOCK_SESSIONS])
+
+// 检索逻辑：关键词会同时匹配标题、用户ID、用户名称与任意消息正文，便于审计人员快速定位上下文。
+const sessionMatchesKeyword = (session, keyword) => {
+  if (!keyword) return true
+  const lowerKeyword = keyword.toLowerCase()
+  return [session.title, session.userId, session.userName, session.sessionId]
+    .some((field) => field.toLowerCase().includes(lowerKeyword)) ||
+    session.messages.some((message) => message.content.toLowerCase().includes(lowerKeyword))
+}
+
+// 数据过滤逻辑：所有过滤都在本地数组完成，状态、时间范围和关键词之间是 AND 关系。
+const filteredSessionAuditList = computed(() => {
+  const keyword = sessionAuditKeyword.value.trim()
+  const range = sessionAuditDateRange.value || []
+  return sessionAuditList.value.filter((session) => {
+    const createdTime = new Date(session.createdAt).getTime()
+    const matchKeyword = sessionMatchesKeyword(session, keyword)
+    const matchStatus = !sessionAuditStatus.value || session.status === sessionAuditStatus.value
+    const matchStart = !range[0] || createdTime >= new Date(range[0]).getTime()
+    const matchEnd = !range[1] || createdTime <= new Date(range[1]).getTime()
+    return matchKeyword && matchStatus && matchStart && matchEnd
+  })
+})
+const pagedSessionAuditList = computed(() => {
+  const start = (sessionAuditPage.value - 1) * sessionAuditPageSize.value
+  return filteredSessionAuditList.value.slice(start, start + sessionAuditPageSize.value)
+})
+
+const resetSessionAuditFilters = () => {
+  sessionAuditKeyword.value = ''
+  sessionAuditStatus.value = ''
+  sessionAuditDateRange.value = []
+  sessionAuditPage.value = 1
+}
+
+// 会话隔离逻辑：详情抽屉只持有当前点击的单个 session，不混入其它会话消息。
+const openSessionDetail = (session) => {
+  activeSessionDetail.value = session
+  sessionDetailVisible.value = true
+}
+
+const handleSessionAuditSelection = (rows) => {
+  selectedSessionIds.value = rows.map((row) => row.sessionId)
+}
+
+const copySessionMessage = async (content) => {
+  try {
+    await navigator.clipboard.writeText(content)
+    ElMessage.success('消息内容已复制')
+  } catch (error) {
+    ElMessage.warning('当前浏览器不支持自动复制，请手动选择内容')
+  }
+}
+
+const exportSelectedSessions = () => {
+  if (!selectedSessionIds.value.length) {
+    ElMessage.warning('请先选择需要导出的会话')
+    return
+  }
+  ElMessage.success('已模拟导出 ' + selectedSessionIds.value.length + ' 条会话')
+}
+
+const deleteSelectedSessions = () => {
+  if (!selectedSessionIds.value.length) {
+    ElMessage.warning('请先选择需要删除的会话')
+    return
+  }
+  ElMessageBox.confirm('确定删除选中的 ' + selectedSessionIds.value.length + ' 条会话吗？此操作仅移除前端Mock数据。', '批量删除确认', { type: 'warning' })
+    .then(() => {
+      sessionAuditList.value = sessionAuditList.value.filter((session) => !selectedSessionIds.value.includes(session.sessionId))
+      selectedSessionIds.value = []
+      sessionAuditPage.value = 1
+      ElMessage.success('已删除选中会话')
+    })
+    .catch(() => {})
+}
 
 onMounted(() => {
   fetchUsers()
@@ -1419,6 +2094,7 @@ onMounted(() => {
 
 .filter-wrapper {
   display: flex;
+  
   gap: 12px;
   align-items: center;
   margin-bottom: 20px;
@@ -1516,4 +2192,168 @@ onMounted(() => {
 .upload-drag {
   width: 100%;
 }
+
+.testset-management-section {
+  margin-top: 16px;
+}
+
+.testset-card {
+  border-radius: 8px;
+}
+
+.testset-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.testset-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1d2129;
+}
+
+.testset-card-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.testset-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.testset-search {
+  width: 280px;
+}
+
+.testset-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+
+.session-audit-management {
+  display: block;
+}
+
+.session-audit-card {
+  border-radius: 8px;
+}
+
+.session-audit-header,
+.session-audit-actions,
+.session-audit-filter,
+.session-audit-pagination,
+.session-detail-summary {
+  display: flex;
+  align-items: center;
+}
+
+.session-audit-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.session-audit-header h3,
+.session-detail-summary h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1d2129;
+}
+
+.session-audit-header p,
+.session-detail-summary p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.session-audit-actions,
+.session-audit-filter {
+  gap: 12px;
+}
+
+.session-audit-filter {
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.session-audit-keyword {
+  width: 320px;
+}
+
+.session-audit-pagination {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.session-detail-summary {
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.session-message-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100vh - 170px);
+  padding: 16px 4px 0;
+  overflow-y: auto;
+}
+
+.session-message {
+  max-width: 86%;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.session-message.user {
+  align-self: flex-start;
+  background: #f8fafc;
+}
+
+.session-message.assistant {
+  align-self: flex-end;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.session-message p {
+  margin: 0 0 8px;
+  line-height: 1.7;
+  color: #1f2937;
+}
+
+@media (max-width: 860px) {
+  .session-audit-header,
+  .session-detail-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .session-audit-keyword,
+  .session-audit-filter :deep(.el-date-editor),
+  .session-audit-filter :deep(.el-select) {
+    width: 100%;
+  }
+}
+
 </style>

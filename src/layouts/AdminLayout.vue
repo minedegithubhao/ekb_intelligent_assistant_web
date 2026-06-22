@@ -19,6 +19,14 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>评估管理</span>
         </el-menu-item>
+        <el-menu-item index="testsets">
+          <el-icon><Tickets /></el-icon>
+          <span>测试集管理</span>
+        </el-menu-item>
+        <el-menu-item index="sessionAudit">
+          <el-icon><ChatLineSquare /></el-icon>
+          <span>会话审计管理</span>
+        </el-menu-item>
         <el-menu-item index="dashboard">
           <el-icon><DataBoard /></el-icon>
           <span>仪表盘管理</span>
@@ -51,7 +59,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { DataAnalysis, FolderOpened, User } from '@element-plus/icons-vue'
+import { ChatLineSquare, DataAnalysis, DataBoard, FolderOpened, Tickets, User } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['menu-change'])
 const router = useRouter()
@@ -59,6 +67,8 @@ const router = useRouter()
 const activeMenu = ref('users')
 const menuTitleMap = {
   dashboard: '仪表盘管理',
+  testsets: '测试集管理',
+  sessionAudit: '会话审计管理',
   users: '用户管理',
   knowledge: '知识库管理',
   evaluations: '评估管理'

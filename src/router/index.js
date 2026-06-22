@@ -15,28 +15,18 @@ const routes = [
   {
     path: '/admin',
     name: 'Admin',
-    component: AdminIndex,
-    meta: { requiresAuth: true }
+    component: AdminIndex
   },
   {
     path: '/user-chat',
     name: 'UserChat',
-    component: () => import('@/views/user-chat/index.vue'),
-    meta: { requiresAuth: true }
+    component: () => import('@/views/user-chat/index.vue')
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
-})
-
-
-router.beforeEach((to) => {
-  const token = sessionStorage.getItem('token')
-  if (to.meta.requiresAuth && !token) {
-    return '/login'
-  }
 })
 
 export default router

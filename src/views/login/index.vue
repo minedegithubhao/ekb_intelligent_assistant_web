@@ -92,8 +92,8 @@ const handleLogin = async () => {
     }
 
     ElMessage.success(mockResponse.message)
-    localStorage.setItem('token', mockResponse.data.token)
-    localStorage.setItem('userInfo', JSON.stringify(mockResponse.data.user))
+    sessionStorage.setItem('token', mockResponse.data.token)
+    sessionStorage.setItem('userInfo', JSON.stringify(mockResponse.data.user))
 
     router.push(mockResponse.data.user.role === 'admin' ? '/admin' : '/user-chat')
   } catch (error) {

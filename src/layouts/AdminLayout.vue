@@ -19,6 +19,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>评估管理</span>
         </el-menu-item>
+        <el-menu-item index="dashboard">
+          <el-icon><DataBoard /></el-icon>
+          <span>仪表盘管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -33,6 +37,7 @@
           <el-avatar :size="32">管</el-avatar>
           <span class="nickname">管理员</span>
           <el-tag size="small" type="primary" effect="plain">Admin</el-tag>
+          <el-button link type="primary" @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
 
@@ -45,12 +50,15 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { DataAnalysis, FolderOpened, User } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['menu-change'])
+const router = useRouter()
 
 const activeMenu = ref('users')
 const menuTitleMap = {
+  dashboard: '仪表盘管理',
   users: '用户管理',
   knowledge: '知识库管理',
   evaluations: '评估管理'
@@ -59,6 +67,12 @@ const menuTitleMap = {
 const handleMenuSelect = (index) => {
   activeMenu.value = index
   emit('menu-change', index)
+}
+
+const handleLogout = () => {
+  sessionStorage.removeItem('token')
+  sessionStorage.removeItem('userInfo')
+  router.replace('/login')
 }
 </script>
 

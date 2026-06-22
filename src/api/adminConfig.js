@@ -4,15 +4,19 @@ export function getDashboardConfig() {
   return request('/admin/dashboard/config')
 }
 
+export function saveDashboardConfig(payload) {
+  return request('/admin/dashboard/config', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  })
+}
+
 export function getConfigVersions() {
   return request('/admin/config/versions')
 }
 
 export function createConfigVersion(payload) {
-  return request('/admin/config/versions', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  })
+  return saveDashboardConfig(payload)
 }
 
 export function activateConfigVersion(versionId) {

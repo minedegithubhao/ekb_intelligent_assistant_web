@@ -306,17 +306,6 @@
     <el-dialog v-model="configModalVisible" title="修改仪表台参数" width="720px">
       <el-form :model="configForm" label-position="top">
         <div class="two-column">
-          <el-form-item label="模型">
-            <el-input v-model="configForm.model" />
-          </el-form-item>
-          <el-form-item label="Embedding 模型">
-            <el-input v-model="configForm.embedding_model" />
-          </el-form-item>
-        </div>
-        <el-form-item label="重排模型">
-          <el-input v-model="configForm.rerank_model" />
-        </el-form-item>
-        <div class="two-column">
           <el-form-item label="变体生成">
             <el-switch v-model="configForm.variant_generation_enabled" active-text="开" inactive-text="关" />
           </el-form-item>
@@ -357,16 +346,40 @@
         <h4>权重</h4>
         <div class="four-column">
           <el-form-item label="FAQ Dense">
-            <el-input-number v-model="configForm.faq_dense_weight" :min="0" :max="1" :step="0.01" />
+            <el-input-number
+              v-model="configForm.faq_dense_weight"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @change="syncWeightPair('faq', 'dense')"
+            />
           </el-form-item>
           <el-form-item label="FAQ Sparse">
-            <el-input-number v-model="configForm.faq_sparse_weight" :min="0" :max="1" :step="0.01" />
+            <el-input-number
+              v-model="configForm.faq_sparse_weight"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @change="syncWeightPair('faq', 'sparse')"
+            />
           </el-form-item>
           <el-form-item label="Doc Dense">
-            <el-input-number v-model="configForm.doc_dense_weight" :min="0" :max="1" :step="0.01" />
+            <el-input-number
+              v-model="configForm.doc_dense_weight"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @change="syncWeightPair('doc', 'dense')"
+            />
           </el-form-item>
           <el-form-item label="Doc Sparse">
-            <el-input-number v-model="configForm.doc_sparse_weight" :min="0" :max="1" :step="0.01" />
+            <el-input-number
+              v-model="configForm.doc_sparse_weight"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              @change="syncWeightPair('doc', 'sparse')"
+            />
           </el-form-item>
         </div>
 
@@ -448,7 +461,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, UploadFilled } from '@element-plus/icons-vue'
-import { createConfigVersion, getDashboardConfig } from '@/api/adminConfig'
+import { getDashboardConfig, saveDashboardConfig } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
@@ -461,9 +474,6 @@ const configModalVisible = ref(false)
 const configSaving = ref(false)
 const configDescription = ref('')
 const configForm = reactive({
-  model: '',
-  embedding_model: '',
-  rerank_model: '',
   variant_generation_enabled: true,
   rerank_enabled: true,
   faq_k: 20,
@@ -480,6 +490,17 @@ const configForm = reactive({
 })
 
 const editableConfigKeys = Object.keys(configForm)
+
+const normalizeWeight = (value) => Number(Math.min(1, Math.max(0, Number(value || 0))).toFixed(2))
+
+const syncWeightPair = (scope, changedSide) => {
+  const denseKey = `${scope}_dense_weight`
+  const sparseKey = `${scope}_sparse_weight`
+  const changedKey = changedSide === 'dense' ? denseKey : sparseKey
+  const targetKey = changedSide === 'dense' ? sparseKey : denseKey
+  configForm[changedKey] = normalizeWeight(configForm[changedKey])
+  configForm[targetKey] = normalizeWeight(1 - configForm[changedKey])
+}
 
 const fetchDashboardConfig = async () => {
   dashboardLoading.value = true
@@ -504,6 +525,9 @@ const openConfigModal = () => {
 }
 
 const submitConfigForm = async () => {
+  syncWeightPair('faq', 'dense')
+  syncWeightPair('doc', 'dense')
+
   const raw = dashboardConfig.value.raw || {}
   const nextConfig = { ...raw }
   editableConfigKeys.forEach((key) => {
@@ -512,7 +536,7 @@ const submitConfigForm = async () => {
 
   configSaving.value = true
   try {
-    await createConfigVersion({
+    await saveDashboardConfig({
       config: nextConfig,
       description: configDescription.value,
       activate: true

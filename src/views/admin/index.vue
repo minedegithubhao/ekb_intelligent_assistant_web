@@ -305,79 +305,149 @@
       </el-table>
     </section>
 
-    <section v-if="currentTab === 'evaluations'">
-      <div v-if="!activeEvalId" class="pane-card">
-        <div class="filter-wrapper">
-          <el-select v-model="evalQuery.status" placeholder="任务状态" class="filter-item" clearable>
-            <el-option label="待执行" value="pending" />
-            <el-option label="执行中" value="running" />
-            <el-option label="已完成" value="completed" />
-            <el-option label="执行失败" value="failed" />
-          </el-select>
-          <el-button type="primary" @click="fetchEvals">查询</el-button>
-          <el-button type="primary" class="right-action" @click="createEvalVisible = true">新建评估任务</el-button>
+    <section v-if="currentTab === 'evaluations'" class="rag-eval-workbench">
+      <div class="eval-topbar pane-card">
+        <div>
+          <h2>电商RAG评测工作台</h2>
+          <p>对齐 RAG 评测后端字段，逐条评估检索证据、模型回答与标准答案。</p>
         </div>
-
-        <el-table :data="evalList" style="width: 100%">
-          <el-table-column prop="evaluationId" label="任务ID" width="130" />
-          <el-table-column prop="name" label="任务名称" />
-          <el-table-column prop="knowledgeBaseName" label="关联知识库" />
-          <el-table-column prop="status" label="状态">
-            <template #default="scope">
-              <el-tag :type="getEvalTagType(scope.row.status)">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="averageScore" label="平均分">
-            <template #default="scope">
-              <span v-if="scope.row.averageScore" class="score-text">{{ scope.row.averageScore }}</span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="160">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewEvalDetail(scope.row.evaluationId)">查看报告</el-button>
-              <el-button link type="danger" @click="deleteEval(scope.row.evaluationId)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="eval-actions">
+          <el-button @click="resetEvalFilter">重置筛选</el-button>
+          <el-button type="primary" plain @click="saveCurrentEval">保存当前样本</el-button>
+          <el-button type="primary" @click="batchSubmitEval">批量提交</el-button>
+        </div>
       </div>
 
-      <div v-else class="eval-detail-container">
-        <el-button :icon="ArrowLeft" class="back-btn" @click="activeEvalId = null">返回列表</el-button>
+      <div class="eval-filter pane-card">
+        <el-select v-model="evalQuery.scene" placeholder="场景筛选" clearable>
+          <el-option v-for="scene in evalSceneOptions" :key="scene" :label="scene" :value="scene" />
+        </el-select>
+        <el-select v-model="evalQuery.status" placeholder="评测状态" clearable>
+          <el-option label="待评测" value="pending" />
+          <el-option label="草稿" value="draft" />
+          <el-option label="已提交" value="submitted" />
+        </el-select>
+        <el-input v-model="evalQuery.keyword" placeholder="搜索问题、样本ID、店铺" clearable class="eval-keyword" />
+      </div>
 
-        <div class="metrics-grid">
-          <div class="metric-card highlight">
-            <div class="m-label">平均总得分</div>
-            <div class="m-val">{{ evalDetail.summary?.averageScore }}</div>
+      <div class="eval-workspace">
+        <aside class="eval-sample-list pane-card">
+          <div class="eval-section-title">
+            <h3>评测样本</h3>
+            <span>{{ filteredEvalSamples.length }} 条</span>
           </div>
-          <div class="metric-card">
-            <div class="m-label">检索召回</div>
-            <div class="m-val">{{ evalDetail.summary?.retrievalRecall }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">回答相关性</div>
-            <div class="m-val">{{ evalDetail.summary?.answerRelevance }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">忠实度</div>
-            <div class="m-val">{{ evalDetail.summary?.faithfulness }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">回答质量</div>
-            <div class="m-val">{{ evalDetail.summary?.responseQuality }}</div>
-          </div>
-        </div>
-
-        <div class="pane-card table-wrapper">
-          <h2>评测样本细则（共 {{ evalDetail.summary?.questionCount }} 项）</h2>
-          <el-table :data="evalDetail.items" border style="width: 100%">
-            <el-table-column prop="question" label="评估问题" width="240" />
-            <el-table-column prop="answer" label="大模型输出回答" show-overflow-tooltip />
-            <el-table-column prop="score" label="单项得分" width="100" align="center" />
-            <el-table-column prop="retrievedDocumentCount" label="检索文档数" width="110" align="center" />
-            <el-table-column prop="comment" label="分析评语" />
+          <el-table
+            :data="pagedEvalSamples"
+            height="520"
+            highlight-current-row
+            :row-class-name="getEvalRowClass"
+            @current-change="selectEvalSample"
+            @selection-change="handleEvalSelection"
+          >
+            <el-table-column type="selection" width="42" />
+            <el-table-column prop="sampleId" label="样本ID" width="128" />
+            <el-table-column prop="scene" label="场景" width="100" />
+            <el-table-column prop="status" label="状态" width="88">
+              <template #default="scope">
+                <el-tag :type="getEvalStatusTag(scope.row.status)" size="small">{{ getEvalStatusText(scope.row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="userQuestion" label="用户提问" show-overflow-tooltip />
           </el-table>
-        </div>
+          <div class="eval-pagination">
+            <el-pagination
+              v-model:current-page="evalPagination.page"
+              v-model:page-size="evalPagination.pageSize"
+              background
+              small
+              layout="prev, pager, next"
+              :total="filteredEvalSamples.length"
+            />
+          </div>
+        </aside>
+
+        <main v-if="activeEvalSample" class="eval-detail pane-card">
+          <div class="eval-detail-head">
+            <div>
+              <el-tag type="primary" effect="plain">{{ activeEvalSample.sampleId }}</el-tag>
+              <el-tag effect="plain">{{ activeEvalSample.scene }}</el-tag>
+              <el-tag type="success" effect="plain">{{ activeEvalSample.storeName }}</el-tag>
+            </div>
+            <span>任务：{{ activeEvalSample.evaluationTaskId }} · 知识库：{{ activeEvalSample.knowledgeBaseId }}</span>
+          </div>
+
+          <section class="eval-question-block">
+            <h3>用户提问</h3>
+            <p>{{ activeEvalSample.userQuestion }}</p>
+          </section>
+
+          <section class="eval-doc-block">
+            <div class="eval-section-title">
+              <h3>检索知识库原文</h3>
+              <span>{{ activeEvalSample.retrievedDocuments.length }} 条证据</span>
+            </div>
+            <el-collapse class="retrieval-collapse">
+              <el-collapse-item v-for="doc in activeEvalSample.retrievedDocuments" :key="doc.documentId" :name="doc.documentId">
+                <template #title>
+                  <div class="doc-title">
+                    <strong>{{ doc.title }}</strong>
+                    <span>相似度 {{ doc.score }} · {{ doc.source }}</span>
+                  </div>
+                </template>
+                <p class="doc-content">{{ doc.content }}</p>
+              </el-collapse-item>
+            </el-collapse>
+          </section>
+
+          <div class="answer-compare-grid">
+            <section class="answer-card rag-answer">
+              <h3>RAG输出回答</h3>
+              <p>{{ activeEvalSample.ragAnswer }}</p>
+            </section>
+            <section class="answer-card standard-answer">
+              <h3>标准正确答案</h3>
+              <p>{{ activeEvalSample.referenceAnswer }}</p>
+            </section>
+          </div>
+
+          <section class="score-panel">
+            <div class="eval-section-title">
+              <h3>五项评分</h3>
+              <span>0-10分，支持小数</span>
+            </div>
+            <div class="score-grid">
+              <el-form-item v-for="metric in evalScoreMetrics" :key="metric.key" :label="metric.label" :class="{ 'is-error': evalErrors[metric.key] }">
+                <el-input-number
+                  v-model="activeEvalSample.scores[metric.key]"
+                  :min="0"
+                  :max="10"
+                  :step="0.5"
+                  :precision="1"
+                  controls-position="right"
+                />
+                <div v-if="evalErrors[metric.key]" class="eval-error-text">{{ evalErrors[metric.key] }}</div>
+              </el-form-item>
+            </div>
+          </section>
+
+          <section class="defect-panel">
+            <h3>电商缺陷标签</h3>
+            <el-checkbox-group v-model="activeEvalSample.defectTags" class="defect-tags">
+              <el-checkbox-button v-for="tag in ecommerceDefectTags" :key="tag" :label="tag" />
+            </el-checkbox-group>
+          </section>
+
+          <div class="eval-input-grid">
+            <el-form-item label="扣分理由" :class="{ 'is-error': evalErrors.deductionReason }">
+              <el-input v-model="activeEvalSample.deductionReason" type="textarea" :rows="4" placeholder="说明扣分依据，例如证据缺失、承诺过度、售后规则错误等" />
+              <div v-if="evalErrors.deductionReason" class="eval-error-text">{{ evalErrors.deductionReason }}</div>
+            </el-form-item>
+            <el-form-item label="优化建议" :class="{ 'is-error': evalErrors.optimizationSuggestion }">
+              <el-input v-model="activeEvalSample.optimizationSuggestion" type="textarea" :rows="4" placeholder="给出可执行优化建议，例如补充知识库字段、修改提示词、增加转人工规则" />
+              <div v-if="evalErrors.optimizationSuggestion" class="eval-error-text">{{ evalErrors.optimizationSuggestion }}</div>
+            </el-form-item>
+          </div>
+        </main>
       </div>
     </section>
 
@@ -745,68 +815,275 @@ const deleteKB = (id) => {
     .catch(() => {})
 }
 
-const evalQuery = reactive({ status: '' })
-const evalList = ref([])
-const activeEvalId = ref(null)
+const evalQuery = reactive({ scene: '', status: '', keyword: '' })
+const evalPagination = reactive({ page: 1, pageSize: 5 })
+const selectedEvalSampleIds = ref([])
+const activeEvalSampleId = ref('')
+const evalErrors = reactive({})
 const createEvalVisible = ref(false)
 const newEvalForm = reactive({ name: '', knowledgeBaseId: '', metrics: [] })
 const evalDetail = ref({})
+const activeEvalId = ref(null)
 
-const fetchEvals = () => {
-  evalList.value = [
-    {
-      evaluationId: 'eval_10001',
-      name: '项目知识库基础盘点',
-      knowledgeBaseId: 'kb_10001',
-      knowledgeBaseName: '项目知识库',
-      status: 'completed',
-      questionCount: 50,
-      averageScore: 86.5,
-      createdAt: '2026-06-21 13:00:00'
-    }
-  ]
+// Backend-aligned metric keys: each score is persisted under scores[metricKey] in the JSON payload.
+const evalScoreMetrics = [
+  { key: 'answerRelevance', label: '回答相关性' },
+  { key: 'faithfulness', label: '事实忠实度' },
+  { key: 'retrievalGrounding', label: '检索支撑度' },
+  { key: 'referenceCompleteness', label: '标准答案覆盖' },
+  { key: 'commerceSafety', label: '电商安全合规' }
+]
+
+const ecommerceDefectTags = [
+  '售后规则错误',
+  '优惠活动误导',
+  '物流时效不准',
+  '商品参数缺失',
+  '价格承诺风险',
+  '未引用检索证据',
+  '话术不符合客服规范',
+  '应转人工未转'
+]
+
+const evalSamples = ref([
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0001',
+    knowledgeBaseId: 'kb_after_sale_policy',
+    storeName: '天猫旗舰店',
+    scene: '售后退换',
+    status: 'pending',
+    userQuestion: '我买的电饭煲已经拆封试用了两次，还能申请七天无理由退货吗？',
+    retrievedDocuments: [
+      { documentId: 'doc_return_001', title: '七天无理由退货规则', source: '售后政策库/退换货.md', score: 0.93, content: '支持七天无理由退货的商品需保持完好，不影响二次销售。厨电类商品如已通电使用且产生使用痕迹，通常不支持无理由退货。' },
+      { documentId: 'doc_return_018', title: '厨电商品退换细则', source: '售后政策库/厨电.md', score: 0.88, content: '质量问题可按三包政策处理；非质量问题退货需包装、配件、赠品齐全且未影响二次销售。' },
+      { documentId: 'doc_service_004', title: '客服转人工规则', source: '客服SOP/升级处理.md', score: 0.76, content: '涉及质量争议、消费者描述与规则边界不清晰时，客服机器人应建议提交照片并转人工复核。' }
+    ],
+    ragAnswer: '您好，电饭煲拆封后一般仍可以申请七天无理由退货，请保持配件齐全并在订单页提交申请。',
+    referenceAnswer: '已通电试用两次的厨电可能影响二次销售，通常不支持七天无理由退货；如存在质量问题，可提交照片或视频申请售后检测，必要时转人工复核。',
+    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
+    defectTags: [],
+    deductionReason: '',
+    optimizationSuggestion: '',
+    evaluator: 'admin'
+  },
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0002',
+    knowledgeBaseId: 'kb_promotion_rule',
+    storeName: '京东自营店',
+    scene: '活动优惠',
+    status: 'draft',
+    userQuestion: '618满减券可以和店铺会员券一起用吗？为什么结算页少减了20元？',
+    retrievedDocuments: [
+      { documentId: 'doc_coupon_011', title: '618券叠加规则', source: '营销规则/618.md', score: 0.91, content: '平台满减券可与店铺会员券叠加，但同类型店铺券不可重复叠加。部分商品不参与会员券优惠，以结算页可用券为准。' },
+      { documentId: 'doc_coupon_014', title: '优惠金额差异说明', source: '营销规则/优惠计算.md', score: 0.84, content: '用户反馈优惠少减时，应核对商品活动范围、券门槛、券类型和订单金额是否满足使用条件。' }
+    ],
+    ragAnswer: '可以一起使用，少减20元可能是系统延迟，建议刷新后重新下单。',
+    referenceAnswer: '平台满减券和店铺会员券通常可叠加，但需满足商品范围、门槛和券类型限制；少减20元应引导用户核对结算页不可用原因，而不是承诺系统延迟。',
+    scores: { answerRelevance: 6, faithfulness: 4, retrievalGrounding: 5, referenceCompleteness: 5, commerceSafety: 3 },
+    defectTags: ['优惠活动误导', '价格承诺风险'],
+    deductionReason: '回答直接归因系统延迟，缺少对券门槛、适用商品和不可用原因的核对，存在误导用户风险。',
+    optimizationSuggestion: '补充优惠核验步骤，并要求模型引用结算页不可用原因，避免承诺刷新后一定生效。',
+    evaluator: 'admin'
+  },
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0003',
+    knowledgeBaseId: 'kb_logistics',
+    storeName: '抖音商城',
+    scene: '物流配送',
+    status: 'pending',
+    userQuestion: '我在新疆下单的羽绒服，页面写48小时发货，预计几天能到？',
+    retrievedDocuments: [
+      { documentId: 'doc_ship_007', title: '偏远地区配送时效', source: '物流政策/区域时效.md', score: 0.89, content: '新疆、西藏、内蒙古等区域发货后预计5-8天送达，遇天气或安检可能延迟。' },
+      { documentId: 'doc_ship_002', title: '发货承诺说明', source: '物流政策/发货.md', score: 0.82, content: '48小时发货指商家完成出库并交付承运商，不等同于48小时送达。' }
+    ],
+    ragAnswer: '48小时内会送到，请您耐心等待物流更新。',
+    referenceAnswer: '48小时发货不等于48小时送达；新疆地区通常发货后预计5-8天送达，具体以物流轨迹为准，天气或安检可能导致延迟。',
+    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
+    defectTags: [],
+    deductionReason: '',
+    optimizationSuggestion: '',
+    evaluator: 'admin'
+  },
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0004',
+    knowledgeBaseId: 'kb_product_specs',
+    storeName: '微信小店',
+    scene: '商品参数',
+    status: 'submitted',
+    userQuestion: '这款儿童保温杯内胆是不是316不锈钢？能不能放洗碗机？',
+    retrievedDocuments: [
+      { documentId: 'doc_sku_316', title: '儿童保温杯材质说明', source: '商品资料/SKU-BC316.md', score: 0.95, content: '杯体内胆材质为316L不锈钢，杯盖含PP与硅胶密封圈。' },
+      { documentId: 'doc_sku_clean', title: '清洗保养说明', source: '商品资料/清洗.md', score: 0.87, content: '建议手洗，不建议整杯放入洗碗机，高温可能影响密封圈寿命。' }
+    ],
+    ragAnswer: '内胆是316L不锈钢。建议手洗，不建议整杯放入洗碗机，以免影响杯盖密封圈。',
+    referenceAnswer: '内胆为316L不锈钢；杯盖含PP和硅胶密封圈，建议手洗，不建议整杯放入洗碗机。',
+    scores: { answerRelevance: 9, faithfulness: 9, retrievalGrounding: 9, referenceCompleteness: 8.5, commerceSafety: 9 },
+    defectTags: [],
+    deductionReason: '整体正确，仅未明确杯盖含PP和硅胶密封圈。',
+    optimizationSuggestion: '回答商品材质时同时覆盖杯体、杯盖和密封圈，减少用户二次追问。',
+    evaluator: 'admin'
+  },
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0005',
+    knowledgeBaseId: 'kb_invoice',
+    storeName: '拼多多专营店',
+    scene: '发票售后',
+    status: 'pending',
+    userQuestion: '订单已经确认收货了，还能改公司发票抬头吗？',
+    retrievedDocuments: [
+      { documentId: 'doc_invoice_003', title: '发票抬头修改规则', source: '财务规则/发票.md', score: 0.9, content: '发票未开具前可修改抬头；已开具发票需先申请红冲后重新开具，具体以财务审核为准。' },
+      { documentId: 'doc_invoice_006', title: '确认收货后开票', source: '财务规则/收货后.md', score: 0.79, content: '确认收货不影响发票申请，但已开具发票的修改需走作废或红冲流程。' }
+    ],
+    ragAnswer: '确认收货后不能再修改发票抬头。',
+    referenceAnswer: '确认收货不等于不能修改。若发票未开具，可修改抬头；若已开具，需要申请作废或红冲后重开，并以财务审核结果为准。',
+    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
+    defectTags: [],
+    deductionReason: '',
+    optimizationSuggestion: '',
+    evaluator: 'admin'
+  },
+  {
+    evaluationTaskId: 'eval_ec_20260622',
+    sampleId: 'EC-RAG-0006',
+    knowledgeBaseId: 'kb_after_sale_policy',
+    storeName: '天猫旗舰店',
+    scene: '人工复核',
+    status: 'pending',
+    userQuestion: '收到的护肤品瓶口有漏液，但我已经拆包装了，可以赔偿吗？',
+    retrievedDocuments: [
+      { documentId: 'doc_damage_021', title: '破损漏液处理', source: '售后政策/破损.md', score: 0.92, content: '签收后发现破损、漏液，应在48小时内提交外包装、商品破损照片和快递面单，客服核实后提供补发、退款或补偿方案。' },
+      { documentId: 'doc_manual_009', title: '争议售后转人工', source: '客服SOP/人工复核.md', score: 0.86, content: '涉及破损漏液、赔付金额和责任归属的售后争议，应收集凭证后转人工处理。' }
+    ],
+    ragAnswer: '拆包装后不能赔偿，建议下次签收时检查。',
+    referenceAnswer: '拆包装不必然影响漏液售后。应引导用户在48小时内提交外包装、商品漏液照片和快递面单，核实后提供补发、退款或补偿方案，并转人工复核。',
+    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
+    defectTags: [],
+    deductionReason: '',
+    optimizationSuggestion: '',
+    evaluator: 'admin'
+  }
+])
+
+const evalSceneOptions = computed(() => Array.from(new Set(evalSamples.value.map((sample) => sample.scene))))
+const filteredEvalSamples = computed(() => {
+  const keyword = evalQuery.keyword.trim().toLowerCase()
+  return evalSamples.value.filter((sample) => {
+    const matchScene = !evalQuery.scene || sample.scene === evalQuery.scene
+    const matchStatus = !evalQuery.status || sample.status === evalQuery.status
+    const matchKeyword = !keyword || [sample.sampleId, sample.storeName, sample.userQuestion].some((field) => field.toLowerCase().includes(keyword))
+    return matchScene && matchStatus && matchKeyword
+  })
+})
+const pagedEvalSamples = computed(() => {
+  const start = (evalPagination.page - 1) * evalPagination.pageSize
+  return filteredEvalSamples.value.slice(start, start + evalPagination.pageSize)
+})
+const activeEvalSample = computed(() => evalSamples.value.find((sample) => sample.sampleId === activeEvalSampleId.value) || filteredEvalSamples.value[0] || null)
+
+
+const clearEvalErrors = () => {
+  Object.keys(evalErrors).forEach((key) => delete evalErrors[key])
 }
 
-const getEvalTagType = (status) => {
-  const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
+const validateEvalSample = (sample) => {
+  clearEvalErrors()
+  evalScoreMetrics.forEach((metric) => {
+    const value = sample.scores[metric.key]
+    if (value === null || value === undefined || value === '') {
+      evalErrors[metric.key] = '请填写0-10分'
+    } else if (value < 0 || value > 10) {
+      evalErrors[metric.key] = '分数必须在0-10之间'
+    }
+  })
+  const scoreValues = evalScoreMetrics.map((metric) => Number(sample.scores[metric.key]))
+  const hasLowScore = scoreValues.some((value) => Number.isFinite(value) && value < 7)
+  if (hasLowScore && !sample.deductionReason.trim()) {
+    evalErrors.deductionReason = '存在低于7分项时必须填写扣分理由'
+  }
+  if (sample.defectTags.length && !sample.optimizationSuggestion.trim()) {
+    evalErrors.optimizationSuggestion = '选择缺陷标签后请填写优化建议'
+  }
+  return Object.keys(evalErrors).length === 0
+}
+
+const selectEvalSample = (sample) => {
+  if (!sample) return
+  activeEvalSampleId.value = sample.sampleId
+  clearEvalErrors()
+}
+
+const handleEvalSelection = (rows) => {
+  selectedEvalSampleIds.value = rows.map((row) => row.sampleId)
+}
+
+const saveCurrentEval = () => {
+  if (!activeEvalSample.value) return
+  if (!validateEvalSample(activeEvalSample.value)) {
+    ElMessage.error('请先修正高亮的评测字段')
+    return
+  }
+  activeEvalSample.value.status = 'draft'
+  ElMessage.success('当前评测样本已保存为草稿')
+}
+
+const batchSubmitEval = () => {
+  const targets = selectedEvalSampleIds.value.length
+    ? evalSamples.value.filter((sample) => selectedEvalSampleIds.value.includes(sample.sampleId))
+    : [activeEvalSample.value].filter(Boolean)
+  if (!targets.length) {
+    ElMessage.warning('请选择需要提交的评测样本')
+    return
+  }
+  const invalid = targets.find((sample) => !validateEvalSample(sample))
+  if (invalid) {
+    activeEvalSampleId.value = invalid.sampleId
+    ElMessage.error('存在未通过校验的样本，请补全后再提交')
+    return
+  }
+  targets.forEach((sample) => {
+    sample.status = 'submitted'
+  })
+  ElMessage.success('评测样本已批量提交')
+}
+
+const resetEvalFilter = () => {
+  Object.assign(evalQuery, { scene: '', status: '', keyword: '' })
+  evalPagination.page = 1
+}
+
+const getEvalStatusText = (status) => {
+  const maps = { pending: '待评测', draft: '草稿', submitted: '已提交' }
+  return maps[status] || status
+}
+
+const getEvalStatusTag = (status) => {
+  const maps = { pending: 'info', draft: 'warning', submitted: 'success' }
   return maps[status] || 'info'
 }
 
-const viewEvalDetail = (id) => {
-  activeEvalId.value = id
-  evalDetail.value = {
-    evaluationId: id,
-    name: '项目知识库评估',
-    summary: {
-      questionCount: 50,
-      averageScore: 86.5,
-      retrievalRecall: 0.82,
-      answerRelevance: 0.88,
-      faithfulness: 0.85,
-      responseQuality: 0.91
-    },
-    items: [
-      {
-        question: '这个项目的核心功能是什么？',
-        answer: '项目主要用于企业知识库管理、检索问答和评估分析。',
-        score: 88,
-        retrievedDocumentCount: 4,
-        comment: '回答覆盖核心功能，暂未发现明显幻觉。'
-      }
-    ]
-  }
+const getEvalRowClass = ({ row }) => row.sampleId === activeEvalSampleId.value ? 'active-eval-row' : ''
+
+const fetchEvals = () => {
+  ElMessage.success('已加载内置电商RAG评测样本')
 }
 
+const getEvalTagType = getEvalStatusTag
+const viewEvalDetail = (id) => {
+  activeEvalId.value = id
+}
 const submitCreateEval = () => {
   ElMessage.success('评估任务创建成功')
   createEvalVisible.value = false
-  fetchEvals()
+}
+const deleteEval = (id) => {
+  ElMessage.success('评估任务 ' + id + ' 已删除')
 }
 
-const deleteEval = (id) => {
-  ElMessage.success(`评估任务 ${id} 已删除`)
-  fetchEvals()
-}
 
 onMounted(() => {
   fetchUsers()
@@ -816,6 +1093,238 @@ onMounted(() => {
 </script>
 
 <style scoped>
+
+.rag-eval-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eval-topbar,
+.eval-filter,
+.eval-detail,
+.eval-sample-list {
+  border-color: #e5e7eb;
+}
+
+.eval-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.eval-topbar h2,
+.eval-section-title h3,
+.eval-question-block h3,
+.answer-card h3,
+.defect-panel h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #111827;
+}
+
+.eval-topbar p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.eval-actions,
+.eval-filter,
+.eval-detail-head,
+.eval-section-title,
+.doc-title {
+  display: flex;
+  align-items: center;
+}
+
+.eval-actions {
+  flex: none;
+  gap: 10px;
+}
+
+.eval-filter {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.eval-filter :deep(.el-select) {
+  width: 180px;
+}
+
+.eval-keyword {
+  width: 320px;
+}
+
+.eval-workspace {
+  display: grid;
+  grid-template-columns: 430px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.eval-section-title {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.eval-section-title span,
+.eval-detail-head span,
+.doc-title span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.eval-sample-list :deep(.active-eval-row td) {
+  background: #eef4ff !important;
+}
+
+.eval-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.eval-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eval-detail-head {
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.eval-detail-head > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.eval-question-block,
+.eval-doc-block,
+.score-panel,
+.defect-panel,
+.eval-question-block p,
+.answer-card p,
+.doc-content {
+  margin: 10px 0 0;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.retrieval-collapse {
+  background: #ffffff;
+  border-radius: 8px;
+}
+
+.doc-title {
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.answer-compare-grid,
+.eval-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.answer-card {
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.rag-answer {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.standard-answer {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.score-grid :deep(.el-form-item) {
+  display: block;
+  margin-bottom: 0;
+}
+
+.score-grid :deep(.el-input-number) {
+  width: 100%;
+}
+
+.defect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.eval-input-grid :deep(.el-form-item) {
+  display: block;
+  margin-bottom: 0;
+}
+
+.eval-error-text {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #dc2626;
+}
+
+.score-panel :deep(.el-form-item.is-error .el-input-number__wrapper),
+.eval-input-grid :deep(.el-form-item.is-error .el-textarea__inner) {
+  box-shadow: 0 0 0 1px #ef4444 inset;
+}
+
+@media (max-width: 1280px) {
+  .eval-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .eval-topbar,
+  .eval-detail-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .eval-actions,
+  .eval-filter,
+  .answer-compare-grid,
+  .eval-input-grid,
+  .score-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .eval-keyword,
+  .eval-filter :deep(.el-select) {
+    width: 100%;
+  }
+}
+
 
 .commerce-dashboard { min-height: calc(100vh - 108px); color: #1f2937; }
 .dashboard-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - 108px); overflow: hidden; background: #f3f6fb; border: 1px solid #e5e7eb; border-radius: 8px; }

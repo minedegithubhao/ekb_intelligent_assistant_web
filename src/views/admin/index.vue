@@ -1,218 +1,80 @@
 <template>
   <AdminLayout @menu-change="currentTab = $event">
 
-    <section v-if="currentTab === 'dashboard'" class="commerce-dashboard" :class="{ 'dark-theme': darkTheme }">
-      <div class="dashboard-shell">
-        <aside class="dashboard-sidebar">
-          <div class="brand-block">
-            <div class="brand-logo">K</div>
-            <div>
-              <strong>KnowForge</strong>
-              <span>电商知识问答中台</span>
-            </div>
-          </div>
-          <el-menu default-active="overview" class="dashboard-menu">
-            <el-sub-menu index="business">
-              <template #title>
-                <el-icon><DataAnalysis /></el-icon>
-                <span>经营洞察</span>
-              </template>
-              <el-menu-item index="overview">问答总览</el-menu-item>
-              <el-menu-item index="store">店铺热力</el-menu-item>
-              <el-menu-item index="channel">渠道分布</el-menu-item>
-            </el-sub-menu>
-            <el-sub-menu index="qa">
-              <template #title>
-                <el-icon><ChatDotRound /></el-icon>
-                <span>问答运营</span>
-              </template>
-              <el-menu-item index="records">问答记录</el-menu-item>
-              <el-menu-item index="review">人工复核</el-menu-item>
-              <el-menu-item index="alerts">异常告警</el-menu-item>
-            </el-sub-menu>
-            <el-sub-menu index="settings">
-              <template #title>
-                <el-icon><Setting /></el-icon>
-                <span>系统配置</span>
-              </template>
-              <el-menu-item index="layout">卡片布局</el-menu-item>
-              <el-menu-item index="rules">回复策略</el-menu-item>
-            </el-sub-menu>
-          </el-menu>
-        </aside>
-
-        <main class="dashboard-main">
-          <header class="dashboard-header">
-            <div class="header-left">
-              <div class="header-logo">电商企业知识问答助手</div>
-              <el-input v-model="globalKeyword" class="global-search" placeholder="搜索店铺、订单、知识条目或问题" clearable>
-                <template #prefix>
-                  <el-icon><Search /></el-icon>
-                </template>
-              </el-input>
-            </div>
-            <div class="header-actions">
-              <el-badge :value="alertList.length" class="notice-badge">
-                <el-button :icon="Bell" circle @click="detailDialogVisible = true" />
-              </el-badge>
-              <el-switch v-model="darkTheme" inline-prompt active-text="暗" inactive-text="亮" class="theme-switch" />
-            </div>
-          </header>
-
-          <div class="dashboard-breadcrumb-row">
-            <el-breadcrumb separator="/">
-              <el-breadcrumb-item>后台管理</el-breadcrumb-item>
-              <el-breadcrumb-item>经营洞察</el-breadcrumb-item>
-              <el-breadcrumb-item>问答仪表盘</el-breadcrumb-item>
-            </el-breadcrumb>
-            <div class="dashboard-toolbar-actions">
-              <el-button :icon="Setting" @click="layoutDrawerVisible = true">配置布局</el-button>
-              <el-button type="primary" :icon="Download" @click="exportRecords">导出数据</el-button>
-            </div>
-          </div>
-
-          <div class="filter-bar dashboard-filter">
-            <el-date-picker v-model="dashboardFilters.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
-            <el-select v-model="dashboardFilters.store" placeholder="店铺" clearable>
-              <el-option v-for="store in storeOptions" :key="store" :label="store" :value="store" />
-            </el-select>
-            <el-select v-model="dashboardFilters.type" placeholder="问题类型" clearable>
-              <el-option v-for="type in questionTypeOptions" :key="type" :label="type" :value="type" />
-            </el-select>
-            <el-select v-model="dashboardFilters.satisfaction" placeholder="满意度" clearable>
-              <el-option label="高满意" value="高满意" />
-              <el-option label="中性" value="中性" />
-              <el-option label="低满意" value="低满意" />
-            </el-select>
-            <el-button type="primary">查询</el-button>
-            <el-button @click="resetDashboardFilters">重置</el-button>
-          </div>
-
-          <div class="kpi-grid">
-            <article v-for="item in kpiCards" :key="item.title" class="kpi-card">
-              <div class="kpi-card-head">
-                <span>{{ item.title }}</span>
-                <el-tag :type="item.status" effect="plain" size="small">{{ item.badge }}</el-tag>
-              </div>
-              <strong>{{ item.value }}</strong>
-              <div class="compare-row">
-                <span :class="item.yoy >= 0 ? 'up' : 'down'">同比 {{ formatPercent(item.yoy) }}</span>
-                <span :class="item.mom >= 0 ? 'up' : 'down'">环比 {{ formatPercent(item.mom) }}</span>
-              </div>
-            </article>
-          </div>
-
-          <section class="dashboard-layout-grid">
-            <section v-for="card in enabledLayoutCards" :key="card.key" class="dashboard-card" :class="card.className">
-              <div class="card-title-row">
-                <h3>{{ card.title }}</h3>
-                <span>{{ card.extra }}</span>
-              </div>
-
-              <template v-if="card.key === 'trend'">
-                <div class="trend-chart">
-                  <svg viewBox="0 0 500 170" preserveAspectRatio="none">
-                    <polyline :points="trendPolyline" fill="none" stroke="#2f6fed" stroke-width="4" stroke-linecap="round" />
-                    <rect v-for="(item, index) in trendData" :key="item.label" :x="42 + index * 62" :y="155 - (16 - item.latency) * 8" width="22" :height="(16 - item.latency) * 8" rx="4" fill="#12b981" opacity="0.78" />
-                  </svg>
-                  <div class="chart-axis"><span v-for="item in trendData" :key="item.label">{{ item.label }}</span></div>
-                </div>
-                <div class="legend-row"><span class="legend blue">咨询量</span><span class="legend green">回复时效</span></div>
-              </template>
-
-              <template v-else-if="card.key === 'pie'">
-                <div class="pie-grid">
-                  <div class="pie-block">
-                    <div class="donut" :style="pieStyle(categoryShare)"><span>分类</span></div>
-                    <div class="pie-legend"><p v-for="item in categoryShare" :key="item.name"><i :style="{ background: item.color }"></i>{{ item.name }} {{ item.value }}%</p></div>
-                  </div>
-                  <div class="pie-block">
-                    <div class="donut" :style="pieStyle(channelShare)"><span>渠道</span></div>
-                    <div class="pie-legend"><p v-for="item in channelShare" :key="item.name"><i :style="{ background: item.color }"></i>{{ item.name }} {{ item.value }}%</p></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'ranking'">
-                <div class="rank-list">
-                  <div v-for="(item, index) in topQuestions" :key="item.question" class="rank-item">
-                    <b>{{ index + 1 }}</b>
-                    <div><strong>{{ item.question }}</strong><span>咨询 {{ item.count }} 次 · 解决率 {{ item.resolveRate }}</span></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'heat'">
-                <div class="heat-list">
-                  <div v-for="item in heatStores" :key="item.name" class="heat-row">
-                    <div class="heat-meta"><span>{{ item.name }}</span><em>{{ item.hot }}%</em></div>
-                    <div class="heat-bar" :style="heatStyle(item.hot)"><span>待响应 {{ item.wait }}</span></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'visitor'">
-                <div class="visitor-grid">
-                  <div v-for="item in visitorBoard" :key="item.channel" class="visitor-item">
-                    <span>{{ item.channel }}</span><strong>{{ item.consulting }}</strong><small>访客 {{ item.visitors }} · {{ item.trend }}</small>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'alert'">
-                <div class="mini-alert-list">
-                  <div v-for="item in alertList" :key="item.title" class="mini-alert" :class="item.level"><strong>{{ item.title }}</strong><span>{{ item.desc }}</span></div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'review'">
-                <div class="review-list">
-                  <div v-for="item in reviewTasks" :key="item.id" class="review-item">
-                    <div><strong>{{ item.title }}</strong><span>{{ item.id }} · {{ item.owner }}</span></div><em>{{ item.priority }}</em>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'records'">
-                <div class="record-actions"><el-button @click="batchMarkRecords">批量标记</el-button><el-button type="primary" @click="exportRecords">导出</el-button></div>
-                <el-table :data="qaRecords" border stripe @selection-change="handleRecordSelection">
-                  <el-table-column type="selection" width="48" />
-                  <el-table-column prop="id" label="记录ID" width="150" sortable />
-                  <el-table-column prop="time" label="时间" width="160" sortable />
-                  <el-table-column prop="store" label="店铺" width="120" />
-                  <el-table-column prop="type" label="问题类型" width="110" />
-                  <el-table-column prop="question" label="用户问题" show-overflow-tooltip />
-                  <el-table-column prop="answerTime" label="响应秒数" width="110" sortable />
-                  <el-table-column prop="satisfaction" label="满意度" width="100" />
-                  <el-table-column prop="status" label="状态" width="100" />
-                </el-table>
-                <div class="pagination-row"><el-pagination background layout="prev, pager, next, sizes, total" :total="128" :page-sizes="[10, 20, 50]" /></div>
-              </template>
-            </section>
-          </section>
-        </main>
+    <section v-if="currentTab === 'dashboard'" class="simple-dashboard">
+      <div class="pane-card module-head">
+        <div>
+          <h2>仪表盘管理</h2>
+          <p>保留核心运营指标、告警和问答记录，减少复杂图表与自定义布局代码。</p>
+        </div>
+        <div class="module-actions">
+          <el-button @click="dashboardReportVisible = true">异常提醒</el-button>
+          <el-button type="primary" @click="exportRecords">导出记录</el-button>
+        </div>
       </div>
 
-      <el-dialog v-model="detailDialogVisible" title="全局详情与异常提醒" width="640px">
-        <div class="alert-stack">
-          <div v-for="alert in alertList" :key="alert.title" class="alert-item" :class="alert.level">
-            <div><strong>{{ alert.title }}</strong><p>{{ alert.desc }}</p></div>
-            <el-tag :type="alert.tag">{{ alert.time }}</el-tag>
+      <div class="dashboard-summary-grid">
+        <el-card v-for="item in dashboardSummary" :key="item.label" shadow="never" class="summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <small :class="item.trend >= 0 ? 'up' : 'down'">
+            {{ item.trend >= 0 ? '+' : '' }}{{ item.trend }}% 较昨日
+          </small>
+        </el-card>
+      </div>
+
+      <div class="pane-card compact-toolbar">
+        <el-input v-model="dashboardKeyword" placeholder="搜索店铺、问题或状态" clearable />
+        <el-button type="primary" plain @click="dashboardKeyword = dashboardKeyword.trim()">查询</el-button>
+        <el-button @click="resetDashboardKeyword">重置</el-button>
+      </div>
+
+      <div class="dashboard-simple-grid">
+        <el-card shadow="never">
+          <template #header>咨询趋势</template>
+          <div class="simple-bars">
+            <div v-for="item in dashboardTrend" :key="item.day" class="simple-bar-row">
+              <span>{{ item.day }}</span>
+              <div class="simple-bar-track"><i :style="{ width: item.percent + '%' }"></i></div>
+              <em>{{ item.count }}</em>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card shadow="never">
+          <template #header>TOP 高频问题</template>
+          <div class="simple-rank-list">
+            <div v-for="(item, index) in dashboardTopQuestions" :key="item.question">
+              <b>{{ index + 1 }}</b>
+              <span>{{ item.question }}</span>
+              <em>{{ item.count }}次</em>
+            </div>
+          </div>
+        </el-card>
+      </div>
+
+      <el-card shadow="never" class="simple-table-card">
+        <template #header>问答记录</template>
+        <el-table :data="filteredDashboardRecords" border stripe style="width: 100%">
+          <el-table-column prop="id" label="记录ID" width="150" sortable />
+          <el-table-column prop="time" label="时间" width="160" sortable />
+          <el-table-column prop="store" label="店铺" width="140" />
+          <el-table-column prop="type" label="问题类型" width="120" />
+          <el-table-column prop="question" label="用户问题" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="answerTime" label="响应秒数" width="110" sortable />
+          <el-table-column prop="satisfaction" label="满意度" width="100" />
+          <el-table-column prop="status" label="状态" width="100" />
+        </el-table>
+      </el-card>
+
+      <el-dialog v-model="dashboardReportVisible" title="异常提醒" width="560px">
+        <div class="simple-alert-list">
+          <div v-for="item in dashboardAlerts" :key="item.title" class="simple-alert-item">
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.desc }}</p>
           </div>
         </div>
       </el-dialog>
-
-      <el-drawer v-model="layoutDrawerVisible" title="仪表盘卡片自定义布局" size="360px">
-        <div class="layout-config-list">
-          <div v-for="(card, index) in layoutCards" :key="card.key" class="layout-config-item">
-            <el-checkbox v-model="card.enabled">{{ card.title }}</el-checkbox>
-            <div>
-              <el-button :icon="ArrowUp" circle size="small" :disabled="index === 0" @click="moveLayoutCard(index, -1)" />
-              <el-button :icon="ArrowDown" circle size="small" :disabled="index === layoutCards.length - 1" @click="moveLayoutCard(index, 1)" />
-            </div>
-          </div>
-        </div>
-      </el-drawer>
     </section>
 
     <section v-if="currentTab === 'users'" class="pane-card">
@@ -305,21 +167,21 @@
       </el-table>
     </section>
 
-    <section v-if="currentTab === 'evaluations'" class="rag-eval-workbench">
-      <div class="eval-topbar pane-card">
+    <section v-if="currentTab === 'evaluations'" class="simple-eval">
+      <div class="pane-card module-head">
         <div>
-          <h2>电商RAG评测工作台</h2>
-          <p>对齐 RAG 评测后端字段，逐条评估检索证据、模型回答与标准答案。</p>
+          <h2>评估管理</h2>
+          <p>简约版 RAG 评估工作台，保留样本查看、打分、缺陷标记和评估报告。</p>
         </div>
-        <div class="eval-actions">
+        <div class="module-actions">
           <el-button @click="resetEvalFilter">重置筛选</el-button>
           <el-button type="success" plain @click="evalReportVisible = true">评估报告</el-button>
-          <el-button type="primary" plain @click="saveCurrentEval">保存当前样本</el-button>
-          <el-button type="primary" @click="batchSubmitEval">批量提交</el-button>
+          <el-button type="primary" plain @click="saveCurrentEval">保存当前</el-button>
+          <el-button type="primary" @click="batchSubmitEval">提交评估</el-button>
         </div>
       </div>
 
-      <div class="eval-filter pane-card">
+      <div class="pane-card compact-toolbar">
         <el-select v-model="evalQuery.scene" placeholder="场景筛选" clearable>
           <el-option v-for="scene in evalSceneOptions" :key="scene" :label="scene" :value="scene" />
         </el-select>
@@ -328,188 +190,117 @@
           <el-option label="草稿" value="draft" />
           <el-option label="已提交" value="submitted" />
         </el-select>
-        <el-input v-model="evalQuery.keyword" placeholder="搜索问题、样本ID、店铺" clearable class="eval-keyword" />
+        <el-input v-model="evalQuery.keyword" placeholder="搜索问题、样本ID、店铺" clearable />
       </div>
 
-
-      <el-dialog v-model="evalReportVisible" title="评估报告" width="980px" class="eval-report-dialog">
-        <section class="eval-report-panel">
-        <div class="eval-report-head">
-          <div>
-            <h3>评估报告</h3>
-            <p>基于当前 Mock 评测样本自动汇总，用于快速查看整体质量与问题分布。</p>
-          </div>
-          <el-tag type="primary" effect="plain">{{ evalReportSummary.taskId }}</el-tag>
-        </div>
-
-        <div class="eval-report-kpis">
-          <div class="eval-report-kpi">
-            <span>样本总数</span>
-            <strong>{{ evalReportSummary.totalSamples }}</strong>
-          </div>
-          <div class="eval-report-kpi">
-            <span>已提交</span>
-            <strong>{{ evalReportSummary.submittedSamples }}</strong>
-          </div>
-          <div class="eval-report-kpi">
-            <span>平均分</span>
-            <strong>{{ evalReportSummary.averageScore }}</strong>
-          </div>
-          <div class="eval-report-kpi warning">
-            <span>低分样本</span>
-            <strong>{{ evalReportSummary.lowScoreSamples }}</strong>
-          </div>
-        </div>
-
-        <div class="eval-report-grid">
-          <div class="eval-report-block">
-            <h4>五项指标均分</h4>
-            <div v-for="metric in evalReportSummary.metricAverages" :key="metric.key" class="report-progress-row">
-              <span>{{ metric.label }}</span>
-              <el-progress :percentage="metric.percent" :stroke-width="8" :show-text="false" />
-              <em>{{ metric.value }}</em>
-            </div>
-          </div>
-          <div class="eval-report-block">
-            <h4>缺陷标签分布</h4>
-            <div v-if="evalReportSummary.defectStats.length" class="report-tag-list">
-              <el-tag v-for="item in evalReportSummary.defectStats" :key="item.tag" effect="plain" type="warning">
-                {{ item.tag }} · {{ item.count }}
-              </el-tag>
-            </div>
-            <el-empty v-else description="暂无缺陷标签" :image-size="64" />
-          </div>
-          <div class="eval-report-block">
-            <h4>场景通过率</h4>
-            <div v-for="scene in evalReportSummary.sceneStats" :key="scene.scene" class="scene-stat-row">
-              <span>{{ scene.scene }}</span>
-              <strong>{{ scene.passRate }}%</strong>
-              <small>{{ scene.passed }}/{{ scene.total }}</small>
-            </div>
-          </div>
-        </div>
-        </section>
-      </el-dialog>
-
-      <div class="eval-workspace">
-        <aside class="eval-sample-list pane-card">
-          <div class="eval-section-title">
-            <h3>评测样本</h3>
-            <span>{{ filteredEvalSamples.length }} 条</span>
-          </div>
+      <div class="simple-eval-grid">
+        <el-card shadow="never" class="eval-list-card">
+          <template #header>评测样本</template>
           <el-table
             :data="pagedEvalSamples"
-            height="520"
+            border
             highlight-current-row
             :row-class-name="getEvalRowClass"
             @current-change="selectEvalSample"
-            @selection-change="handleEvalSelection"
           >
-            <el-table-column type="selection" width="42" />
-            <el-table-column prop="sampleId" label="样本ID" width="128" />
-            <el-table-column prop="scene" label="场景" width="100" />
-            <el-table-column prop="status" label="状态" width="88">
+            <el-table-column prop="sampleId" label="样本ID" width="130" />
+            <el-table-column prop="scene" label="场景" width="110" />
+            <el-table-column prop="storeName" label="店铺" width="130" />
+            <el-table-column prop="status" label="状态" width="100">
               <template #default="scope">
-                <el-tag :type="getEvalStatusTag(scope.row.status)" size="small">{{ getEvalStatusText(scope.row.status) }}</el-tag>
+                <el-tag :type="getEvalStatusTag(scope.row.status)" size="small">
+                  {{ getEvalStatusText(scope.row.status) }}
+                </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="userQuestion" label="用户提问" show-overflow-tooltip />
+            <el-table-column prop="userQuestion" label="用户提问" min-width="220" show-overflow-tooltip />
           </el-table>
-          <div class="eval-pagination">
+          <div class="simple-pagination">
             <el-pagination
-              v-model:current-page="evalPagination.page"
-              v-model:page-size="evalPagination.pageSize"
+              v-model:current-page="evalPage"
               background
               small
               layout="prev, pager, next"
+              :page-size="evalPageSize"
               :total="filteredEvalSamples.length"
             />
           </div>
-        </aside>
+        </el-card>
 
-        <main v-if="activeEvalSample" class="eval-detail pane-card">
-          <div class="eval-detail-head">
-            <div>
-              <el-tag type="primary" effect="plain">{{ activeEvalSample.sampleId }}</el-tag>
-              <el-tag effect="plain">{{ activeEvalSample.scene }}</el-tag>
-              <el-tag type="success" effect="plain">{{ activeEvalSample.storeName }}</el-tag>
+        <el-card v-if="activeEvalSample" shadow="never" class="eval-form-card">
+          <template #header>
+            <div class="card-header-line">
+              <span>{{ activeEvalSample.sampleId }} · {{ activeEvalSample.scene }}</span>
+              <el-tag effect="plain">{{ activeEvalSample.storeName }}</el-tag>
             </div>
-            <span>任务：{{ activeEvalSample.evaluationTaskId }} · 知识库：{{ activeEvalSample.knowledgeBaseId }}</span>
-          </div>
+          </template>
 
-          <section class="eval-question-block">
+          <section class="simple-block">
             <h3>用户提问</h3>
             <p>{{ activeEvalSample.userQuestion }}</p>
           </section>
 
-          <section class="eval-doc-block">
-            <div class="eval-section-title">
-              <h3>检索知识库原文</h3>
-              <span>{{ activeEvalSample.retrievedDocuments.length }} 条证据</span>
-            </div>
-            <el-collapse class="retrieval-collapse">
-              <el-collapse-item v-for="doc in activeEvalSample.retrievedDocuments" :key="doc.documentId" :name="doc.documentId">
-                <template #title>
-                  <div class="doc-title">
-                    <strong>{{ doc.title }}</strong>
-                    <span>相似度 {{ doc.score }} · {{ doc.source }}</span>
-                  </div>
-                </template>
-                <p class="doc-content">{{ doc.content }}</p>
+          <section class="simple-block">
+            <h3>检索知识库原文</h3>
+            <el-collapse>
+              <el-collapse-item v-for="doc in activeEvalSample.retrievedDocuments" :key="doc.documentId" :title="doc.title" :name="doc.documentId">
+                <p>{{ doc.content }}</p>
               </el-collapse-item>
             </el-collapse>
           </section>
 
-          <div class="answer-compare-grid">
-            <section class="answer-card rag-answer">
-              <h3>RAG输出回答</h3>
+          <div class="answer-simple-grid">
+            <section class="simple-block">
+              <h3>RAG 输出回答</h3>
               <p>{{ activeEvalSample.ragAnswer }}</p>
             </section>
-            <section class="answer-card standard-answer">
+            <section class="simple-block">
               <h3>标准正确答案</h3>
               <p>{{ activeEvalSample.referenceAnswer }}</p>
             </section>
           </div>
 
-          <section class="score-panel">
-            <div class="eval-section-title">
-              <h3>五项评分</h3>
-              <span>0-10分，支持小数</span>
-            </div>
-            <div class="score-grid">
+          <section class="simple-block">
+            <h3>五项评分</h3>
+            <div class="score-simple-grid">
               <el-form-item v-for="metric in evalScoreMetrics" :key="metric.key" :label="metric.label" :class="{ 'is-error': evalErrors[metric.key] }">
-                <el-input-number
-                  v-model="activeEvalSample.scores[metric.key]"
-                  :min="0"
-                  :max="10"
-                  :step="0.5"
-                  :precision="1"
-                  controls-position="right"
-                />
+                <el-input-number v-model="activeEvalSample.scores[metric.key]" :min="0" :max="10" :step="1" />
                 <div v-if="evalErrors[metric.key]" class="eval-error-text">{{ evalErrors[metric.key] }}</div>
               </el-form-item>
             </div>
           </section>
 
-          <section class="defect-panel">
+          <section class="simple-block">
             <h3>电商缺陷标签</h3>
-            <el-checkbox-group v-model="activeEvalSample.defectTags" class="defect-tags">
-              <el-checkbox-button v-for="tag in ecommerceDefectTags" :key="tag" :label="tag" />
+            <el-checkbox-group v-model="activeEvalSample.defectTags" class="simple-checkbox-group">
+              <el-checkbox v-for="tag in ecommerceDefectTags" :key="tag" :label="tag" />
             </el-checkbox-group>
           </section>
 
-          <div class="eval-input-grid">
+          <div class="answer-simple-grid">
             <el-form-item label="扣分理由" :class="{ 'is-error': evalErrors.deductionReason }">
-              <el-input v-model="activeEvalSample.deductionReason" type="textarea" :rows="4" placeholder="说明扣分依据，例如证据缺失、承诺过度、售后规则错误等" />
+              <el-input v-model="activeEvalSample.deductionReason" type="textarea" :rows="3" />
               <div v-if="evalErrors.deductionReason" class="eval-error-text">{{ evalErrors.deductionReason }}</div>
             </el-form-item>
-            <el-form-item label="优化建议" :class="{ 'is-error': evalErrors.optimizationSuggestion }">
-              <el-input v-model="activeEvalSample.optimizationSuggestion" type="textarea" :rows="4" placeholder="给出可执行优化建议，例如补充知识库字段、修改提示词、增加转人工规则" />
-              <div v-if="evalErrors.optimizationSuggestion" class="eval-error-text">{{ evalErrors.optimizationSuggestion }}</div>
+            <el-form-item label="优化建议">
+              <el-input v-model="activeEvalSample.optimizationSuggestion" type="textarea" :rows="3" />
             </el-form-item>
           </div>
-        </main>
+        </el-card>
       </div>
+
+      <el-dialog v-model="evalReportVisible" title="评估报告" width="620px">
+        <div class="report-summary">
+          <div><span>样本总数</span><strong>{{ evalReportSummary.total }}</strong></div>
+          <div><span>已提交</span><strong>{{ evalReportSummary.submitted }}</strong></div>
+          <div><span>平均分</span><strong>{{ evalReportSummary.averageScore }}</strong></div>
+          <div><span>低分样本</span><strong>{{ evalReportSummary.lowScore }}</strong></div>
+        </div>
+        <el-table :data="evalReportSummary.metricRows" border size="small">
+          <el-table-column prop="label" label="指标" />
+          <el-table-column prop="value" label="平均分" width="120" />
+        </el-table>
+      </el-dialog>
     </section>
 
 
@@ -663,60 +454,26 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="createEvalVisible" title="发起 RAG 评估任务" width="540px">
-      <el-form :model="newEvalForm" label-position="top">
-        <el-form-item label="评估任务名称" required>
-          <el-input v-model="newEvalForm.name" placeholder="例如：核心业务库第二轮评测" />
-        </el-form-item>
-        <el-form-item label="目标评估知识库" required>
-          <el-select v-model="newEvalForm.knowledgeBaseId" style="width: 100%">
-            <el-option
-              v-for="item in kbList"
-              :key="item.knowledgeBaseId"
-              :label="item.name"
-              :value="item.knowledgeBaseId"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="选择评估指标">
-          <el-checkbox-group v-model="newEvalForm.metrics">
-            <el-checkbox value="retrieval_recall">检索召回率</el-checkbox>
-            <el-checkbox value="answer_relevance">回答相关性</el-checkbox>
-            <el-checkbox value="faithfulness">忠实度</el-checkbox>
-            <el-checkbox value="response_quality">综合回答质量</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createEvalVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreateEval">提交任务</el-button>
-      </template>
-    </el-dialog>
-
-
-    <section v-if="currentTab === 'sessionAudit'" class="session-audit-management">
-      <el-card shadow="never" class="session-audit-card">
+    <section v-if="currentTab === 'sessionAudit'" class="simple-session-audit">
+      <el-card shadow="never">
         <template #header>
-          <div class="session-audit-header">
+          <div class="module-head in-card">
             <div>
-              <h3>后台会话审计管理</h3>
-              <p>零依赖纯前端 Mock 展示，用于快速核对会话审计需求和交互效果。</p>
+              <h2>后台会话审计管理</h2>
+              <p>简约纯前端 Mock 展示，仅保留筛选、列表和会话详情。</p>
             </div>
-            <div class="session-audit-actions">
-              <el-button @click="exportSelectedSessions">批量导出</el-button>
-              <el-button type="danger" plain @click="deleteSelectedSessions">批量删除</el-button>
-            </div>
+            <el-button type="primary" plain @click="simulateSessionExport">模拟导出</el-button>
           </div>
         </template>
 
-        <div class="session-audit-filter">
-          <el-input v-model="sessionAuditKeyword" placeholder="搜索标题、用户ID或消息内容" clearable class="session-audit-keyword" />
+        <div class="compact-toolbar">
+          <el-input v-model="sessionAuditKeyword" placeholder="搜索标题、用户ID或消息内容" clearable />
           <el-date-picker
             v-model="sessionAuditDateRange"
-            type="datetimerange"
+            type="daterange"
             range-separator="至"
-            start-placeholder="创建开始时间"
-            end-placeholder="创建结束时间"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
           />
           <el-select v-model="sessionAuditStatus" placeholder="会话状态" clearable>
             <el-option label="活跃" value="active" />
@@ -725,21 +482,12 @@
           <el-button @click="resetSessionAuditFilters">重置</el-button>
         </div>
 
-        <el-table
-          :data="pagedSessionAuditList"
-          border
-          stripe
-          style="width: 100%"
-          @selection-change="handleSessionAuditSelection"
-          @row-click="openSessionDetail"
-        >
-          <el-table-column type="selection" width="48" />
-          <el-table-column prop="sessionId" label="会话ID" width="150" />
+        <el-table :data="pagedSessionAuditList" border stripe style="width: 100%" @row-click="openSessionDetail">
+          <el-table-column prop="sessionId" label="会话ID" width="160" />
           <el-table-column prop="userName" label="用户名称" width="130" />
-          <el-table-column prop="userId" label="用户ID" width="130" />
           <el-table-column prop="title" label="会话标题" min-width="240" show-overflow-tooltip />
           <el-table-column prop="messageCount" label="消息数" width="90" align="center" />
-          <el-table-column prop="status" label="状态" width="96">
+          <el-table-column prop="status" label="状态" width="100">
             <template #default="scope">
               <el-tag :type="scope.row.status === 'active' ? 'success' : 'info'" effect="plain">
                 {{ scope.row.status === 'active' ? '活跃' : '关闭' }}
@@ -747,43 +495,34 @@
             </template>
           </el-table-column>
           <el-table-column prop="createdAt" label="创建时间" width="180" />
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="110" fixed="right">
             <template #default="scope">
-              <el-button link type="primary" @click.stop="openSessionDetail(scope.row)">查看详情</el-button>
+              <el-button link type="primary" @click.stop="openSessionDetail(scope.row)">查看</el-button>
             </template>
           </el-table-column>
         </el-table>
 
-        <div class="session-audit-pagination">
+        <div class="simple-pagination">
           <el-pagination
             v-model:current-page="sessionAuditPage"
-            v-model:page-size="sessionAuditPageSize"
             background
-            layout="total, sizes, prev, pager, next"
-            :page-sizes="[5, 10, 15]"
+            layout="total, prev, pager, next"
+            :page-size="sessionAuditPageSize"
             :total="filteredSessionAuditList.length"
           />
         </div>
       </el-card>
 
-      <el-drawer v-model="sessionDetailVisible" size="720px" title="会话上下文详情">
+      <el-drawer v-model="sessionDetailVisible" size="560px" title="会话详情">
         <template v-if="activeSessionDetail">
           <div class="session-detail-summary">
             <h3>{{ activeSessionDetail.title }}</h3>
             <p>{{ activeSessionDetail.sessionId }} · {{ activeSessionDetail.userName }} · {{ activeSessionDetail.createdAt }}</p>
-            <el-tag :type="activeSessionDetail.status === 'active' ? 'success' : 'info'" effect="plain">
-              {{ activeSessionDetail.status === 'active' ? '活跃' : '关闭' }}
-            </el-tag>
           </div>
           <div class="session-message-flow">
-            <div
-              v-for="message in activeSessionDetail.messages"
-              :key="message.timestamp + message.role + message.content"
-              class="session-message"
-              :class="message.role"
-            >
+            <div v-for="message in activeSessionDetail.messages" :key="message.timestamp + message.role" class="session-message" :class="message.role">
               <div class="message-meta">
-                <span>{{ message.role === 'user' ? '用户提问' : 'AI回答' }}</span>
+                <span>{{ message.role === 'user' ? '用户' : 'AI' }}</span>
                 <time>{{ message.timestamp }}</time>
               </div>
               <p>{{ message.content }}</p>
@@ -794,142 +533,72 @@
       </el-drawer>
     </section>
 
+
   </AdminLayout>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, ArrowLeft, ArrowUp, Bell, ChatDotRound, DataAnalysis, Download, Search, Setting, UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled } from '@element-plus/icons-vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
 const currentTab = ref('users')
 const loading = ref(false)
 
 
-const globalKeyword = ref('')
-const darkTheme = ref(false)
-const detailDialogVisible = ref(false)
-const layoutDrawerVisible = ref(false)
-const selectedRecordIds = ref([])
+const dashboardKeyword = ref('')
+const dashboardReportVisible = ref(false)
 
-const storeOptions = ['天猫旗舰店', '京东自营店', '抖音商城', '微信小店', '拼多多专营店']
-const questionTypeOptions = ['售前咨询', '订单物流', '退换售后', '活动优惠', '商品参数']
-const dashboardFilters = reactive({ dateRange: [], store: '', type: '', satisfaction: '' })
-
-const kpiCards = [
-  { title: '今日咨询量', value: '12,486', yoy: 18.6, mom: 7.4, badge: '高峰稳定', status: 'success' },
-  { title: '智能回复率', value: '92.8%', yoy: 6.2, mom: 2.1, badge: '自动承接', status: 'primary' },
-  { title: '平均响应时效', value: '8.6s', yoy: -12.4, mom: -5.8, badge: '持续优化', status: 'warning' },
-  { title: '满意度评分', value: '4.72', yoy: 3.8, mom: 1.6, badge: '口碑良好', status: 'success' }
+const dashboardSummary = [
+  { label: '今日咨询量', value: '12,486', trend: 7.4 },
+  { label: '智能回复率', value: '92.8%', trend: 2.1 },
+  { label: '平均响应', value: '8.6s', trend: -5.8 },
+  { label: '满意度', value: '4.72', trend: 1.6 }
 ]
 
-const trendData = [
-  { label: '06-16', consult: 7600, latency: 13 },
-  { label: '06-17', consult: 8800, latency: 11 },
-  { label: '06-18', consult: 9300, latency: 10 },
-  { label: '06-19', consult: 10800, latency: 9 },
-  { label: '06-20', consult: 11600, latency: 8.8 },
-  { label: '06-21', consult: 12100, latency: 8.4 },
-  { label: '06-22', consult: 12486, latency: 8.6 }
+const dashboardTrend = [
+  { day: '06-18', count: 9300, percent: 74 },
+  { day: '06-19', count: 10800, percent: 86 },
+  { day: '06-20', count: 11600, percent: 92 },
+  { day: '06-21', count: 12100, percent: 96 },
+  { day: '06-22', count: 12486, percent: 100 }
 ]
 
-const categoryShare = [
-  { name: '订单物流', value: 32, color: '#2f6fed' },
-  { name: '退换售后', value: 24, color: '#12b981' },
-  { name: '商品参数', value: 18, color: '#f59e0b' },
-  { name: '活动优惠', value: 16, color: '#8b5cf6' },
-  { name: '其他问题', value: 10, color: '#64748b' }
+const dashboardTopQuestions = [
+  { question: '订单什么时候发货？', count: 3862 },
+  { question: '七天无理由退货怎么申请？', count: 2950 },
+  { question: '优惠券能否叠加？', count: 2418 },
+  { question: '尺码偏大还是偏小？', count: 2066 },
+  { question: '发票抬头如何修改？', count: 1680 }
 ]
-const channelShare = [
-  { name: 'APP', value: 36, color: '#0ea5e9' },
-  { name: '小程序', value: 28, color: '#22c55e' },
-  { name: '网页客服', value: 21, color: '#f97316' },
-  { name: '企微', value: 15, color: '#a855f7' }
+
+const dashboardAlerts = [
+  { title: '低满意度集中出现', desc: '近 30 分钟出现多条低满意度评价，建议复核活动优惠回答。' },
+  { title: '未回复会话超时', desc: '部分店铺存在超过 5 分钟未响应会话，建议转人工处理。' }
 ]
-const topQuestions = [
-  { question: '订单什么时候发货？', count: 3862, resolveRate: '96%' },
-  { question: '7天无理由退货怎么申请？', count: 2950, resolveRate: '94%' },
-  { question: '618优惠券能否叠加？', count: 2418, resolveRate: '91%' },
-  { question: '尺码偏大还是偏小？', count: 2066, resolveRate: '88%' },
-  { question: '发票抬头如何修改？', count: 1680, resolveRate: '93%' }
-]
-const heatStores = [
-  { name: '天猫旗舰店', hot: 94, wait: 18 },
-  { name: '京东自营店', hot: 82, wait: 11 },
-  { name: '抖音商城', hot: 76, wait: 23 },
-  { name: '微信小店', hot: 58, wait: 7 },
-  { name: '拼多多专营店', hot: 66, wait: 15 },
-  { name: '有赞会员店', hot: 49, wait: 5 }
-]
-const visitorBoard = [
-  { channel: '天猫', visitors: 1482, consulting: 126, trend: '+12%' },
-  { channel: '京东', visitors: 1036, consulting: 84, trend: '+8%' },
-  { channel: '抖音', visitors: 1860, consulting: 172, trend: '+21%' },
-  { channel: '微信', visitors: 642, consulting: 45, trend: '+5%' }
-]
-const alertList = [
-  { title: '低满意度集中出现', desc: '抖音商城近30分钟出现12条低满意度评价，集中在优惠券叠加问题。', time: '2分钟前', level: 'danger', tag: 'danger' },
-  { title: '未回复会话超时', desc: '京东自营店有8条会话超过3分钟未响应，建议转人工处理。', time: '8分钟前', level: 'warning', tag: 'warning' },
-  { title: '知识命中率波动', desc: '商品参数类知识命中率较昨日下降4.3%，建议复核新品资料。', time: '15分钟前', level: 'info', tag: 'primary' }
-]
-const reviewTasks = [
-  { id: 'R-1024', title: '大促价保规则回答冲突', owner: '售后组', priority: '高' },
-  { id: 'R-1025', title: '海外仓物流时效待确认', owner: '物流组', priority: '中' },
-  { id: 'R-1026', title: '新品材质参数缺少来源', owner: '商品组', priority: '中' }
-]
-const qaRecords = ref([
-  { id: 'QA20260622001', time: '2026-06-22 10:24', store: '天猫旗舰店', type: '订单物流', question: '订单今天能发出吗？', answerTime: 6.2, satisfaction: '高满意', status: '已回复' },
-  { id: 'QA20260622002', time: '2026-06-22 10:21', store: '抖音商城', type: '活动优惠', question: '满减券和会员券能一起用吗？', answerTime: 18.4, satisfaction: '低满意', status: '待复核' },
-  { id: 'QA20260622003', time: '2026-06-22 10:18', store: '京东自营店', type: '退换售后', question: '拆封后还能退货吗？', answerTime: 9.5, satisfaction: '中性', status: '已回复' },
-  { id: 'QA20260622004', time: '2026-06-22 10:15', store: '微信小店', type: '商品参数', question: '这款外套适合多少温度？', answerTime: 11.1, satisfaction: '高满意', status: '已标记' }
+
+const dashboardRecords = ref([
+  { id: 'QA20260622001', time: '2026-06-22 10:24', store: '天猫旗舰店', type: '订单物流', question: '订单今天能发出吗？', answerTime: 6.2, satisfaction: '高', status: '已回复' },
+  { id: 'QA20260622002', time: '2026-06-22 10:21', store: '抖音商城', type: '活动优惠', question: '满减券和会员券能一起用吗？', answerTime: 18.4, satisfaction: '低', status: '待复核' },
+  { id: 'QA20260622003', time: '2026-06-22 10:18', store: '京东自营店', type: '退换售后', question: '拆封后还能退货吗？', answerTime: 9.5, satisfaction: '中', status: '已回复' },
+  { id: 'QA20260622004', time: '2026-06-22 10:15', store: '微信小店', type: '商品参数', question: '这款外套适合多少温度？', answerTime: 11.1, satisfaction: '高', status: '已标记' }
 ])
-const layoutCards = reactive([
-  { key: 'trend', title: '折线/柱状趋势图', extra: '咨询量 · 回复时效', enabled: true, className: 'span-8' },
-  { key: 'pie', title: '环形饼图', extra: '分类 · 渠道', enabled: true, className: 'span-4' },
-  { key: 'ranking', title: 'TOP高频问题排行榜', extra: '今日', enabled: true, className: 'span-4' },
-  { key: 'heat', title: '店铺咨询热力分布图', extra: '实时', enabled: true, className: 'span-4' },
-  { key: 'visitor', title: '实时访客咨询看板', extra: '在线', enabled: true, className: 'span-4' },
-  { key: 'alert', title: '低满意度/未回复异常告警', extra: '待处理', enabled: true, className: 'span-4' },
-  { key: 'review', title: '待处理人工复核面板', extra: '3项', enabled: true, className: 'span-4' },
-  { key: 'records', title: '数据问答记录表', extra: '分页 · 排序 · 导出', enabled: true, className: 'span-12' }
-])
-const maxConsult = computed(() => Math.max(...trendData.map((item) => item.consult)))
-const trendPolyline = computed(() => trendData.map((item, index) => {
-  const x = 24 + index * 72
-  const y = 150 - (item.consult / maxConsult.value) * 112
-  return x + ',' + y
-}).join(' '))
-const enabledLayoutCards = computed(() => layoutCards.filter((card) => card.enabled))
-const formatPercent = (value) => (value > 0 ? '+' : '') + value + '%'
-const pieStyle = (items) => ({ background: 'conic-gradient(' + items.map((item, index) => {
-  const start = items.slice(0, index).reduce((sum, cur) => sum + cur.value, 0)
-  const end = start + item.value
-  return item.color + ' ' + start + '% ' + end + '%'
-}).join(', ') + ')' })
-const heatStyle = (hot) => ({ background: 'linear-gradient(90deg, rgba(47, 111, 237, ' + (0.18 + hot / 140) + ') ' + hot + '%, #eef2f7 ' + hot + '%)' })
-const resetDashboardFilters = () => {
-  Object.assign(dashboardFilters, { dateRange: [], store: '', type: '', satisfaction: '' })
+
+const filteredDashboardRecords = computed(() => {
+  const keyword = dashboardKeyword.value.trim().toLowerCase()
+  if (!keyword) return dashboardRecords.value
+  return dashboardRecords.value.filter((row) =>
+    [row.store, row.type, row.question, row.status].some((field) => field.toLowerCase().includes(keyword))
+  )
+})
+
+const resetDashboardKeyword = () => {
+  dashboardKeyword.value = ''
 }
+
 const exportRecords = () => {
-  ElMessage.success('问答记录导出任务已创建')
-}
-const handleRecordSelection = (rows) => {
-  selectedRecordIds.value = rows.map((row) => row.id)
-}
-const batchMarkRecords = () => {
-  if (!selectedRecordIds.value.length) {
-    ElMessage.warning('请先选择需要标记的问答记录')
-    return
-  }
-  qaRecords.value = qaRecords.value.map((row) => selectedRecordIds.value.includes(row.id) ? { ...row, status: '已标记' } : row)
-  ElMessage.success('已批量标记 ' + selectedRecordIds.value.length + ' 条记录')
-}
-const moveLayoutCard = (index, offset) => {
-  const target = index + offset
-  if (target < 0 || target >= layoutCards.length) return
-  const [item] = layoutCards.splice(index, 1)
-  layoutCards.splice(target, 0, item)
+  ElMessage.success('已模拟导出问答记录')
 }
 
 const userQuery = reactive({ keyword: '', role: '', status: '' })
@@ -1062,208 +731,73 @@ const deleteKB = (id) => {
 }
 
 const evalQuery = reactive({ scene: '', status: '', keyword: '' })
-const evalPagination = reactive({ page: 1, pageSize: 5 })
-const selectedEvalSampleIds = ref([])
+const evalPage = ref(1)
+const evalPageSize = 5
 const activeEvalSampleId = ref('')
 const evalErrors = reactive({})
-const createEvalVisible = ref(false)
 const evalReportVisible = ref(false)
-const newEvalForm = reactive({ name: '', knowledgeBaseId: '', metrics: [] })
-const evalDetail = ref({})
-const activeEvalId = ref(null)
 
-// Backend-aligned metric keys: each score is persisted under scores[metricKey] in the JSON payload.
 const evalScoreMetrics = [
-  { key: 'answerRelevance', label: '回答相关性' },
-  { key: 'faithfulness', label: '事实忠实度' },
-  { key: 'retrievalGrounding', label: '检索支撑度' },
-  { key: 'referenceCompleteness', label: '标准答案覆盖' },
-  { key: 'commerceSafety', label: '电商安全合规' }
+  { key: 'answerRelevance', label: '相关性' },
+  { key: 'faithfulness', label: '忠实度' },
+  { key: 'retrievalGrounding', label: '检索支撑' },
+  { key: 'referenceCompleteness', label: '答案覆盖' },
+  { key: 'commerceSafety', label: '电商合规' }
 ]
 
-const ecommerceDefectTags = [
-  '售后规则错误',
-  '优惠活动误导',
-  '物流时效不准',
-  '商品参数缺失',
-  '价格承诺风险',
-  '未引用检索证据',
-  '话术不符合客服规范',
-  '应转人工未转'
-]
+const ecommerceDefectTags = ['售后规则错误', '优惠误导', '物流不准', '参数缺失', '应转人工']
 
 const evalSamples = ref([
   {
-    evaluationTaskId: 'eval_ec_20260622',
     sampleId: 'EC-RAG-0001',
-    knowledgeBaseId: 'kb_after_sale_policy',
     storeName: '天猫旗舰店',
     scene: '售后退换',
     status: 'pending',
-    userQuestion: '我买的电饭煲已经拆封试用了两次，还能申请七天无理由退货吗？',
+    userQuestion: '电饭煲已经拆封试用两次，还能申请七天无理由退货吗？',
     retrievedDocuments: [
-      { documentId: 'doc_return_001', title: '七天无理由退货规则', source: '售后政策库/退换货.md', score: 0.93, content: '支持七天无理由退货的商品需保持完好，不影响二次销售。厨电类商品如已通电使用且产生使用痕迹，通常不支持无理由退货。' },
-      { documentId: 'doc_return_018', title: '厨电商品退换细则', source: '售后政策库/厨电.md', score: 0.88, content: '质量问题可按三包政策处理；非质量问题退货需包装、配件、赠品齐全且未影响二次销售。' },
-      { documentId: 'doc_service_004', title: '客服转人工规则', source: '客服SOP/升级处理.md', score: 0.76, content: '涉及质量争议、消费者描述与规则边界不清晰时，客服机器人应建议提交照片并转人工复核。' }
+      { documentId: 'doc_return_001', title: '七天无理由退货规则', content: '厨电类商品如已通电使用且影响二次销售，通常不支持无理由退货。' },
+      { documentId: 'doc_service_004', title: '人工复核规则', content: '涉及质量争议或规则边界不清时，应建议提交照片并转人工复核。' }
     ],
-    ragAnswer: '您好，电饭煲拆封后一般仍可以申请七天无理由退货，请保持配件齐全并在订单页提交申请。',
-    referenceAnswer: '已通电试用两次的厨电可能影响二次销售，通常不支持七天无理由退货；如存在质量问题，可提交照片或视频申请售后检测，必要时转人工复核。',
+    ragAnswer: '拆封后一般仍可申请七天无理由退货，请保持配件齐全。',
+    referenceAnswer: '已通电试用的厨电可能影响二次销售，通常不支持七天无理由；如存在质量问题，可提交凭证申请售后检测。',
     scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
     defectTags: [],
     deductionReason: '',
-    optimizationSuggestion: '',
-    evaluator: 'admin'
+    optimizationSuggestion: ''
   },
   {
-    evaluationTaskId: 'eval_ec_20260622',
     sampleId: 'EC-RAG-0002',
-    knowledgeBaseId: 'kb_promotion_rule',
     storeName: '京东自营店',
     scene: '活动优惠',
     status: 'draft',
-    userQuestion: '618满减券可以和店铺会员券一起用吗？为什么结算页少减了20元？',
+    userQuestion: '618 满减券可以和店铺会员券一起用吗？',
     retrievedDocuments: [
-      { documentId: 'doc_coupon_011', title: '618券叠加规则', source: '营销规则/618.md', score: 0.91, content: '平台满减券可与店铺会员券叠加，但同类型店铺券不可重复叠加。部分商品不参与会员券优惠，以结算页可用券为准。' },
-      { documentId: 'doc_coupon_014', title: '优惠金额差异说明', source: '营销规则/优惠计算.md', score: 0.84, content: '用户反馈优惠少减时，应核对商品活动范围、券门槛、券类型和订单金额是否满足使用条件。' }
+      { documentId: 'doc_coupon_011', title: '优惠券叠加规则', content: '平台满减券可与店铺会员券叠加，但需满足门槛和商品范围限制。' }
     ],
-    ragAnswer: '可以一起使用，少减20元可能是系统延迟，建议刷新后重新下单。',
-    referenceAnswer: '平台满减券和店铺会员券通常可叠加，但需满足商品范围、门槛和券类型限制；少减20元应引导用户核对结算页不可用原因，而不是承诺系统延迟。',
-    scores: { answerRelevance: 6, faithfulness: 4, retrievalGrounding: 5, referenceCompleteness: 5, commerceSafety: 3 },
-    defectTags: ['优惠活动误导', '价格承诺风险'],
-    deductionReason: '回答直接归因系统延迟，缺少对券门槛、适用商品和不可用原因的核对，存在误导用户风险。',
-    optimizationSuggestion: '补充优惠核验步骤，并要求模型引用结算页不可用原因，避免承诺刷新后一定生效。',
-    evaluator: 'admin'
+    ragAnswer: '通常可以一起使用，实际以结算页展示为准。',
+    referenceAnswer: '可叠加但需满足活动范围、门槛和券类型限制，最终以结算页可用优惠为准。',
+    scores: { answerRelevance: 8, faithfulness: 8, retrievalGrounding: 8, referenceCompleteness: 7, commerceSafety: 8 },
+    defectTags: [],
+    deductionReason: '',
+    optimizationSuggestion: ''
   },
   {
-    evaluationTaskId: 'eval_ec_20260622',
     sampleId: 'EC-RAG-0003',
-    knowledgeBaseId: 'kb_logistics',
     storeName: '抖音商城',
     scene: '物流配送',
-    status: 'pending',
-    userQuestion: '我在新疆下单的羽绒服，页面写48小时发货，预计几天能到？',
-    retrievedDocuments: [
-      { documentId: 'doc_ship_007', title: '偏远地区配送时效', source: '物流政策/区域时效.md', score: 0.89, content: '新疆、西藏、内蒙古等区域发货后预计5-8天送达，遇天气或安检可能延迟。' },
-      { documentId: 'doc_ship_002', title: '发货承诺说明', source: '物流政策/发货.md', score: 0.82, content: '48小时发货指商家完成出库并交付承运商，不等同于48小时送达。' }
-    ],
-    ragAnswer: '48小时内会送到，请您耐心等待物流更新。',
-    referenceAnswer: '48小时发货不等于48小时送达；新疆地区通常发货后预计5-8天送达，具体以物流轨迹为准，天气或安检可能导致延迟。',
-    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
-    defectTags: [],
-    deductionReason: '',
-    optimizationSuggestion: '',
-    evaluator: 'admin'
-  },
-  {
-    evaluationTaskId: 'eval_ec_20260622',
-    sampleId: 'EC-RAG-0004',
-    knowledgeBaseId: 'kb_product_specs',
-    storeName: '微信小店',
-    scene: '商品参数',
     status: 'submitted',
-    userQuestion: '这款儿童保温杯内胆是不是316不锈钢？能不能放洗碗机？',
+    userQuestion: '新疆订单页面写 48 小时发货，是 48 小时能到吗？',
     retrievedDocuments: [
-      { documentId: 'doc_sku_316', title: '儿童保温杯材质说明', source: '商品资料/SKU-BC316.md', score: 0.95, content: '杯体内胆材质为316L不锈钢，杯盖含PP与硅胶密封圈。' },
-      { documentId: 'doc_sku_clean', title: '清洗保养说明', source: '商品资料/清洗.md', score: 0.87, content: '建议手洗，不建议整杯放入洗碗机，高温可能影响密封圈寿命。' }
+      { documentId: 'doc_ship_007', title: '偏远地区配送时效', content: '新疆等地区通常发货后 5-8 天送达，天气或安检可能延迟。' }
     ],
-    ragAnswer: '内胆是316L不锈钢。建议手洗，不建议整杯放入洗碗机，以免影响杯盖密封圈。',
-    referenceAnswer: '内胆为316L不锈钢；杯盖含PP和硅胶密封圈，建议手洗，不建议整杯放入洗碗机。',
-    scores: { answerRelevance: 9, faithfulness: 9, retrievalGrounding: 9, referenceCompleteness: 8.5, commerceSafety: 9 },
-    defectTags: [],
-    deductionReason: '整体正确，仅未明确杯盖含PP和硅胶密封圈。',
-    optimizationSuggestion: '回答商品材质时同时覆盖杯体、杯盖和密封圈，减少用户二次追问。',
-    evaluator: 'admin'
-  },
-  {
-    evaluationTaskId: 'eval_ec_20260622',
-    sampleId: 'EC-RAG-0005',
-    knowledgeBaseId: 'kb_invoice',
-    storeName: '拼多多专营店',
-    scene: '发票售后',
-    status: 'pending',
-    userQuestion: '订单已经确认收货了，还能改公司发票抬头吗？',
-    retrievedDocuments: [
-      { documentId: 'doc_invoice_003', title: '发票抬头修改规则', source: '财务规则/发票.md', score: 0.9, content: '发票未开具前可修改抬头；已开具发票需先申请红冲后重新开具，具体以财务审核为准。' },
-      { documentId: 'doc_invoice_006', title: '确认收货后开票', source: '财务规则/收货后.md', score: 0.79, content: '确认收货不影响发票申请，但已开具发票的修改需走作废或红冲流程。' }
-    ],
-    ragAnswer: '确认收货后不能再修改发票抬头。',
-    referenceAnswer: '确认收货不等于不能修改。若发票未开具，可修改抬头；若已开具，需要申请作废或红冲后重开，并以财务审核结果为准。',
-    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
+    ragAnswer: '48 小时是发货承诺，不代表 48 小时送达。',
+    referenceAnswer: '48 小时发货指商家交付承运商，新疆地区通常发货后 5-8 天送达，具体以物流轨迹为准。',
+    scores: { answerRelevance: 9, faithfulness: 9, retrievalGrounding: 9, referenceCompleteness: 8, commerceSafety: 9 },
     defectTags: [],
     deductionReason: '',
-    optimizationSuggestion: '',
-    evaluator: 'admin'
-  },
-  {
-    evaluationTaskId: 'eval_ec_20260622',
-    sampleId: 'EC-RAG-0006',
-    knowledgeBaseId: 'kb_after_sale_policy',
-    storeName: '天猫旗舰店',
-    scene: '人工复核',
-    status: 'pending',
-    userQuestion: '收到的护肤品瓶口有漏液，但我已经拆包装了，可以赔偿吗？',
-    retrievedDocuments: [
-      { documentId: 'doc_damage_021', title: '破损漏液处理', source: '售后政策/破损.md', score: 0.92, content: '签收后发现破损、漏液，应在48小时内提交外包装、商品破损照片和快递面单，客服核实后提供补发、退款或补偿方案。' },
-      { documentId: 'doc_manual_009', title: '争议售后转人工', source: '客服SOP/人工复核.md', score: 0.86, content: '涉及破损漏液、赔付金额和责任归属的售后争议，应收集凭证后转人工处理。' }
-    ],
-    ragAnswer: '拆包装后不能赔偿，建议下次签收时检查。',
-    referenceAnswer: '拆包装不必然影响漏液售后。应引导用户在48小时内提交外包装、商品漏液照片和快递面单，核实后提供补发、退款或补偿方案，并转人工复核。',
-    scores: { answerRelevance: null, faithfulness: null, retrievalGrounding: null, referenceCompleteness: null, commerceSafety: null },
-    defectTags: [],
-    deductionReason: '',
-    optimizationSuggestion: '',
-    evaluator: 'admin'
+    optimizationSuggestion: ''
   }
 ])
-
-
-
-const getEvalSampleAverage = (sample) => {
-  const values = evalScoreMetrics
-    .map((metric) => Number(sample.scores[metric.key]))
-    .filter((value) => Number.isFinite(value))
-  if (!values.length) return null
-  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1))
-}
-
-const evalReportSummary = computed(() => {
-  const scoredSamples = evalSamples.value.filter((sample) => getEvalSampleAverage(sample) !== null)
-  const averageScore = scoredSamples.length
-    ? (scoredSamples.reduce((sum, sample) => sum + getEvalSampleAverage(sample), 0) / scoredSamples.length).toFixed(1)
-    : '-'
-  const metricAverages = evalScoreMetrics.map((metric) => {
-    const values = evalSamples.value
-      .map((sample) => Number(sample.scores[metric.key]))
-      .filter((value) => Number.isFinite(value))
-    const value = values.length ? Number((values.reduce((sum, item) => sum + item, 0) / values.length).toFixed(1)) : 0
-    return { ...metric, value: values.length ? value : '-', percent: Math.round(value * 10) }
-  })
-  const defectMap = evalSamples.value.reduce((map, sample) => {
-    sample.defectTags.forEach((tag) => map.set(tag, (map.get(tag) || 0) + 1))
-    return map
-  }, new Map())
-  const sceneMap = evalSamples.value.reduce((map, sample) => {
-    const current = map.get(sample.scene) || { scene: sample.scene, total: 0, passed: 0 }
-    const sampleAverage = getEvalSampleAverage(sample)
-    current.total += 1
-    if (sampleAverage !== null && sampleAverage >= 7) current.passed += 1
-    map.set(sample.scene, current)
-    return map
-  }, new Map())
-  return {
-    taskId: 'eval_ec_20260622',
-    totalSamples: evalSamples.value.length,
-    submittedSamples: evalSamples.value.filter((sample) => sample.status === 'submitted').length,
-    averageScore,
-    lowScoreSamples: scoredSamples.filter((sample) => getEvalSampleAverage(sample) < 7).length,
-    metricAverages,
-    defectStats: Array.from(defectMap.entries()).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count),
-    sceneStats: Array.from(sceneMap.values()).map((item) => ({
-      ...item,
-      passRate: item.total ? Math.round((item.passed / item.total) * 100) : 0
-    }))
-  }
-})
 
 const evalSceneOptions = computed(() => Array.from(new Set(evalSamples.value.map((sample) => sample.scene))))
 const filteredEvalSamples = computed(() => {
@@ -1276,109 +810,76 @@ const filteredEvalSamples = computed(() => {
   })
 })
 const pagedEvalSamples = computed(() => {
-  const start = (evalPagination.page - 1) * evalPagination.pageSize
-  return filteredEvalSamples.value.slice(start, start + evalPagination.pageSize)
+  const start = (evalPage.value - 1) * evalPageSize
+  return filteredEvalSamples.value.slice(start, start + evalPageSize)
 })
 const activeEvalSample = computed(() => evalSamples.value.find((sample) => sample.sampleId === activeEvalSampleId.value) || filteredEvalSamples.value[0] || null)
 
+const evalReportSummary = computed(() => {
+  const averages = evalSamples.value
+    .map((sample) => evalScoreMetrics.map((metric) => Number(sample.scores[metric.key])).filter((score) => !Number.isNaN(score)))
+    .filter((scores) => scores.length === evalScoreMetrics.length)
+    .map((scores) => scores.reduce((sum, score) => sum + score, 0) / scores.length)
+  const metricRows = evalScoreMetrics.map((metric) => {
+    const values = evalSamples.value.map((sample) => Number(sample.scores[metric.key])).filter((score) => !Number.isNaN(score))
+    const value = values.length ? (values.reduce((sum, score) => sum + score, 0) / values.length).toFixed(1) : '-'
+    return { label: metric.label, value }
+  })
+  return {
+    total: evalSamples.value.length,
+    submitted: evalSamples.value.filter((sample) => sample.status === 'submitted').length,
+    averageScore: averages.length ? (averages.reduce((sum, score) => sum + score, 0) / averages.length).toFixed(1) : '-',
+    lowScore: averages.filter((score) => score < 7).length,
+    metricRows
+  }
+})
 
-const clearEvalErrors = () => {
-  Object.keys(evalErrors).forEach((key) => delete evalErrors[key])
+const selectEvalSample = (row) => {
+  if (row) activeEvalSampleId.value = row.sampleId
 }
 
 const validateEvalSample = (sample) => {
-  clearEvalErrors()
+  Object.keys(evalErrors).forEach((key) => delete evalErrors[key])
   evalScoreMetrics.forEach((metric) => {
     const value = sample.scores[metric.key]
-    if (value === null || value === undefined || value === '') {
-      evalErrors[metric.key] = '请填写0-10分'
-    } else if (value < 0 || value > 10) {
-      evalErrors[metric.key] = '分数必须在0-10之间'
-    }
+    if (value === null || value === undefined || value === '') evalErrors[metric.key] = '请填写0-10分'
   })
-  const scoreValues = evalScoreMetrics.map((metric) => Number(sample.scores[metric.key]))
-  const hasLowScore = scoreValues.some((value) => Number.isFinite(value) && value < 7)
+  const hasLowScore = evalScoreMetrics.some((metric) => Number(sample.scores[metric.key]) < 7)
   if (hasLowScore && !sample.deductionReason.trim()) {
-    evalErrors.deductionReason = '存在低于7分项时必须填写扣分理由'
-  }
-  if (sample.defectTags.length && !sample.optimizationSuggestion.trim()) {
-    evalErrors.optimizationSuggestion = '选择缺陷标签后请填写优化建议'
+    evalErrors.deductionReason = '低于7分时请填写扣分理由'
   }
   return Object.keys(evalErrors).length === 0
-}
-
-const selectEvalSample = (sample) => {
-  if (!sample) return
-  activeEvalSampleId.value = sample.sampleId
-  clearEvalErrors()
-}
-
-const handleEvalSelection = (rows) => {
-  selectedEvalSampleIds.value = rows.map((row) => row.sampleId)
 }
 
 const saveCurrentEval = () => {
   if (!activeEvalSample.value) return
   if (!validateEvalSample(activeEvalSample.value)) {
-    ElMessage.error('请先修正高亮的评测字段')
+    ElMessage.error('请先修正高亮字段')
     return
   }
   activeEvalSample.value.status = 'draft'
-  ElMessage.success('当前评测样本已保存为草稿')
+  ElMessage.success('当前样本已保存')
 }
 
 const batchSubmitEval = () => {
-  const targets = selectedEvalSampleIds.value.length
-    ? evalSamples.value.filter((sample) => selectedEvalSampleIds.value.includes(sample.sampleId))
-    : [activeEvalSample.value].filter(Boolean)
-  if (!targets.length) {
-    ElMessage.warning('请选择需要提交的评测样本')
+  if (!activeEvalSample.value) return
+  if (!validateEvalSample(activeEvalSample.value)) {
+    ElMessage.error('请先完成当前样本评分')
     return
   }
-  const invalid = targets.find((sample) => !validateEvalSample(sample))
-  if (invalid) {
-    activeEvalSampleId.value = invalid.sampleId
-    ElMessage.error('存在未通过校验的样本，请补全后再提交')
-    return
-  }
-  targets.forEach((sample) => {
-    sample.status = 'submitted'
-  })
-  ElMessage.success('评测样本已批量提交')
+  activeEvalSample.value.status = 'submitted'
+  ElMessage.success('当前样本已提交')
 }
 
 const resetEvalFilter = () => {
   Object.assign(evalQuery, { scene: '', status: '', keyword: '' })
-  evalPagination.page = 1
+  evalPage.value = 1
 }
 
-const getEvalStatusText = (status) => {
-  const maps = { pending: '待评测', draft: '草稿', submitted: '已提交' }
-  return maps[status] || status
-}
-
-const getEvalStatusTag = (status) => {
-  const maps = { pending: 'info', draft: 'warning', submitted: 'success' }
-  return maps[status] || 'info'
-}
-
+const getEvalStatusText = (status) => ({ pending: '待评测', draft: '草稿', submitted: '已提交' }[status] || status)
+const getEvalStatusTag = (status) => ({ pending: 'info', draft: 'warning', submitted: 'success' }[status] || 'info')
 const getEvalRowClass = ({ row }) => row.sampleId === activeEvalSampleId.value ? 'active-eval-row' : ''
-
-const fetchEvals = () => {
-  ElMessage.success('已加载内置电商RAG评测样本')
-}
-
-const getEvalTagType = getEvalStatusTag
-const viewEvalDetail = (id) => {
-  activeEvalId.value = id
-}
-const submitCreateEval = () => {
-  ElMessage.success('评估任务创建成功')
-  createEvalVisible.value = false
-}
-const deleteEval = (id) => {
-  ElMessage.success('评估任务 ' + id + ' 已删除')
-}
+const fetchEvals = () => {}
 
 
 
@@ -1504,172 +1005,60 @@ const deleteTestSet = (row) => {
 
 /**
  * @typedef {'user' | 'assistant'} MessageRole
- * @typedef {Object} Message
- * @property {MessageRole} role 发送方角色，仅用于区分用户提问和AI回答。
- * @property {string} content 消息正文。
- * @property {string} timestamp 消息发送时间。
- *
+ * @typedef {{ role: MessageRole, content: string, timestamp: string }} Message
  * @typedef {'active' | 'closed'} SessionStatus
- * @typedef {Object} Session
- * @property {string} sessionId 会话ID。
- * @property {string} userId 用户ID。
- * @property {string} userName 用户名称。
- * @property {string} title 会话标题。
- * @property {number} messageCount 消息总数。
- * @property {string} createdAt 创建时间。
- * @property {SessionStatus} status 会话状态。
- * @property {Message[]} messages 完整上下文消息流。
+ * @typedef {{ sessionId: string, userId: string, userName: string, title: string, messageCount: number, createdAt: string, status: SessionStatus, messages: Message[] }} Session
  */
 
-// 纯前端 Mock 数据源：不调用后端接口，所有审计、过滤、删除仅作用于本地数组。
 const SESSION_AUDIT_MOCK_SESSIONS = [
   {
-    sessionId: 'sess_20260622_001', userId: 'u_10001', userName: '李想辰', title: '订单发货时效咨询', status: 'active', createdAt: '2026-06-22 09:12:00',
+    sessionId: 'sess_001',
+    userId: 'u_10001',
+    userName: '李想',
+    title: '订单发货时效咨询',
+    status: 'active',
+    createdAt: '2026-06-22 09:12:00',
     messages: [
-      { role: 'user', content: '我昨天买的电饭煲今天能发货吗？', timestamp: '2026-06-22 09:12:10' },
-      { role: 'assistant', content: '您好，当前订单预计在48小时内完成出库，您可以在订单详情查看物流更新。', timestamp: '2026-06-22 09:12:18' },
-      { role: 'user', content: '我明天要用，能加急吗？', timestamp: '2026-06-22 09:12:45' },
-      { role: 'assistant', content: '可以为您备注加急诉求，但实际发货仍以仓库处理进度为准。', timestamp: '2026-06-22 09:12:51' }
+      { role: 'user', content: '昨天买的电饭煲今天能发货吗？', timestamp: '2026-06-22 09:12:10' },
+      { role: 'assistant', content: '当前订单预计 48 小时内出库，具体以订单详情物流更新为准。', timestamp: '2026-06-22 09:12:18' }
     ]
   },
   {
-    sessionId: 'sess_20260622_002', userId: 'u_10002', userName: '张敏', title: '优惠券叠加规则', status: 'closed', createdAt: '2026-06-22 09:35:00',
+    sessionId: 'sess_002',
+    userId: 'u_10002',
+    userName: '张敏',
+    title: '优惠券叠加规则',
+    status: 'closed',
+    createdAt: '2026-06-22 09:35:00',
     messages: [
-      { role: 'user', content: '618满减券能和会员券一起用吗？', timestamp: '2026-06-22 09:35:03' },
-      { role: 'assistant', content: '平台满减券通常可与店铺会员券叠加，但需满足商品范围和门槛限制。', timestamp: '2026-06-22 09:35:09' },
-      { role: 'user', content: '为什么我的结算页没有叠加？', timestamp: '2026-06-22 09:35:27' },
-      { role: 'assistant', content: '建议核对商品是否参与会员券、券是否同类型互斥，以及订单金额是否满足门槛。', timestamp: '2026-06-22 09:35:34' },
-      { role: 'user', content: '那我可以先付款再退差价吗？', timestamp: '2026-06-22 09:36:02' },
-      { role: 'assistant', content: '暂不建议承诺退差价，请以结算页实际优惠为准；如页面异常可联系人工客服核实。', timestamp: '2026-06-22 09:36:10' },
-      { role: 'user', content: '人工客服在哪里？', timestamp: '2026-06-22 09:36:30' },
-      { role: 'assistant', content: '您可以在当前会话输入“转人工”，我会为您提交人工客服处理。', timestamp: '2026-06-22 09:36:37' },
-      { role: 'user', content: '转人工', timestamp: '2026-06-22 09:36:46' },
-      { role: 'assistant', content: '已为您提交人工客服，请保持页面打开。', timestamp: '2026-06-22 09:36:51' }
+      { role: 'user', content: '满减券能和会员券一起用吗？', timestamp: '2026-06-22 09:35:03' },
+      { role: 'assistant', content: '通常可以叠加，但需要满足商品范围、门槛和券类型限制。', timestamp: '2026-06-22 09:35:09' },
+      { role: 'user', content: '为什么结算页没有叠加？', timestamp: '2026-06-22 09:35:27' },
+      { role: 'assistant', content: '请以结算页可用优惠为准，也可以转人工核实具体原因。', timestamp: '2026-06-22 09:35:34' }
     ]
   },
   {
-    sessionId: 'sess_20260622_003', userId: 'u_10003', userName: '王可', title: '七天无理由退货', status: 'active', createdAt: '2026-06-22 10:05:00',
+    sessionId: 'sess_003',
+    userId: 'u_10003',
+    userName: '王可',
+    title: '七天无理由退货',
+    status: 'active',
+    createdAt: '2026-06-22 10:05:00',
     messages: [
       { role: 'user', content: '拆封试用后还能七天无理由退货吗？', timestamp: '2026-06-22 10:05:06' },
-      { role: 'assistant', content: '如商品已影响二次销售，通常不支持七天无理由退货；质量问题可申请售后检测。', timestamp: '2026-06-22 10:05:13' }
+      { role: 'assistant', content: '如已影响二次销售，通常不支持七天无理由；质量问题可申请售后检测。', timestamp: '2026-06-22 10:05:13' }
     ]
   },
   {
-    sessionId: 'sess_20260622_004', userId: 'u_10004', userName: '赵磊', title: '新疆物流预计送达', status: 'closed', createdAt: '2026-06-22 10:28:00',
+    sessionId: 'sess_004',
+    userId: 'u_10004',
+    userName: '赵磊',
+    title: '偏远地区物流预计送达',
+    status: 'closed',
+    createdAt: '2026-06-22 10:28:00',
     messages: [
-      { role: 'user', content: '新疆订单页面写48小时发货，是48小时到吗？', timestamp: '2026-06-22 10:28:11' },
-      { role: 'assistant', content: '48小时发货表示商家交付承运商，不等同于48小时送达。', timestamp: '2026-06-22 10:28:19' },
-      { role: 'user', content: '那大概几天到？', timestamp: '2026-06-22 10:28:40' },
-      { role: 'assistant', content: '新疆地区通常发货后5-8天送达，具体以物流轨迹为准。', timestamp: '2026-06-22 10:28:48' },
-      { role: 'user', content: '如果延迟怎么办？', timestamp: '2026-06-22 10:29:03' },
-      { role: 'assistant', content: '如超过预计时效仍无更新，可联系人工客服协助催促承运商。', timestamp: '2026-06-22 10:29:12' },
-      { role: 'user', content: '可以赔偿吗？', timestamp: '2026-06-22 10:29:28' },
-      { role: 'assistant', content: '赔付需结合平台规则和实际延迟原因核实，暂不能直接承诺。', timestamp: '2026-06-22 10:29:37' },
-      { role: 'user', content: '帮我记录一下', timestamp: '2026-06-22 10:29:55' },
-      { role: 'assistant', content: '已记录您的诉求，建议后续关注物流轨迹。', timestamp: '2026-06-22 10:30:02' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_005', userId: 'u_10005', userName: '陈诺', title: '发票抬头修改', status: 'active', createdAt: '2026-06-22 11:02:00',
-    messages: [
-      { role: 'user', content: '确认收货后还能改公司发票抬头吗？', timestamp: '2026-06-22 11:02:08' },
-      { role: 'assistant', content: '若发票未开具可修改；若已开具，需要申请作废或红冲后重开。', timestamp: '2026-06-22 11:02:17' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_006', userId: 'u_10006', userName: '刘洋', title: '保温杯材质确认', status: 'closed', createdAt: '2026-06-22 11:40:00',
-    messages: [
-      { role: 'user', content: '儿童保温杯是不是316不锈钢？', timestamp: '2026-06-22 11:40:04' },
-      { role: 'assistant', content: '杯体内胆为316L不锈钢，杯盖含PP与硅胶密封圈。', timestamp: '2026-06-22 11:40:11' },
-      { role: 'user', content: '能放洗碗机吗？', timestamp: '2026-06-22 11:40:20' },
-      { role: 'assistant', content: '建议手洗，不建议整杯放入洗碗机，以免影响密封圈寿命。', timestamp: '2026-06-22 11:40:28' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_007', userId: 'u_10007', userName: '孙佳', title: '护肤品漏液赔付', status: 'active', createdAt: '2026-06-22 12:18:00',
-    messages: [
-      { role: 'user', content: '收到护肤品瓶口漏液，拆包装了还能赔吗？', timestamp: '2026-06-22 12:18:07' },
-      { role: 'assistant', content: '拆包装不必然影响售后，请在48小时内提交外包装、商品漏液照片和快递面单。', timestamp: '2026-06-22 12:18:16' },
-      { role: 'user', content: '我只有商品照片可以吗？', timestamp: '2026-06-22 12:18:36' },
-      { role: 'assistant', content: '建议补充外包装和面单照片，便于核实物流或包装问题。', timestamp: '2026-06-22 12:18:43' },
-      { role: 'user', content: '大概怎么处理？', timestamp: '2026-06-22 12:19:02' },
-      { role: 'assistant', content: '核实后可能提供补发、退款或补偿方案，具体以人工审核结果为准。', timestamp: '2026-06-22 12:19:10' },
-      { role: 'user', content: '那帮我转人工', timestamp: '2026-06-22 12:19:31' },
-      { role: 'assistant', content: '已为您转人工，请上传相关凭证。', timestamp: '2026-06-22 12:19:38' },
-      { role: 'user', content: '好的', timestamp: '2026-06-22 12:20:00' },
-      { role: 'assistant', content: '感谢配合，客服会尽快处理。', timestamp: '2026-06-22 12:20:05' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_008', userId: 'u_10008', userName: '周航', title: '尺码推荐咨询', status: 'closed', createdAt: '2026-06-22 13:05:00',
-    messages: [
-      { role: 'user', content: '身高170体重65，夹克选什么码？', timestamp: '2026-06-22 13:05:09' },
-      { role: 'assistant', content: '建议参考尺码表，常规版型可优先选择L码，如喜欢宽松可选XL。', timestamp: '2026-06-22 13:05:16' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_009', userId: 'u_10009', userName: '吴笛', title: '会员积分抵扣', status: 'active', createdAt: '2026-06-22 13:44:00',
-    messages: [
-      { role: 'user', content: '会员积分能抵扣运费吗？', timestamp: '2026-06-22 13:44:01' },
-      { role: 'assistant', content: '积分通常仅可抵扣商品金额，不支持抵扣运费，具体以结算页展示为准。', timestamp: '2026-06-22 13:44:09' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_010', userId: 'u_10010', userName: '郑然', title: '预售尾款提醒', status: 'closed', createdAt: '2026-06-22 14:20:00',
-    messages: [
-      { role: 'user', content: '预售尾款什么时候付？', timestamp: '2026-06-22 14:20:06' },
-      { role: 'assistant', content: '尾款支付时间请以商品详情页和订单页展示为准，系统也会在支付期内提醒。', timestamp: '2026-06-22 14:20:13' },
-      { role: 'user', content: '错过了怎么办？', timestamp: '2026-06-22 14:20:30' },
-      { role: 'assistant', content: '错过尾款期可能导致订单关闭，建议关注订单页提示。', timestamp: '2026-06-22 14:20:37' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_011', userId: 'u_10011', userName: '何溪', title: '价格保护申请', status: 'active', createdAt: '2026-06-22 15:03:00',
-    messages: [
-      { role: 'user', content: '刚买完就降价了，能价保吗？', timestamp: '2026-06-22 15:03:06' },
-      { role: 'assistant', content: '是否支持价保需看商品是否参加价保服务及申请时间，您可在订单页查看价保入口。', timestamp: '2026-06-22 15:03:13' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_012', userId: 'u_10012', userName: '唐予', title: '赠品漏发处理', status: 'closed', createdAt: '2026-06-22 15:48:00',
-    messages: [
-      { role: 'user', content: '订单里说有赠品，但我没收到。', timestamp: '2026-06-22 15:48:04' },
-      { role: 'assistant', content: '请先核对活动规则和订单明细，若满足赠品条件可提供开箱照片和订单号核实。', timestamp: '2026-06-22 15:48:12' },
-      { role: 'user', content: '我有订单截图。', timestamp: '2026-06-22 15:48:29' },
-      { role: 'assistant', content: '可以上传订单截图和包裹照片，我们会为您核查是否漏发。', timestamp: '2026-06-22 15:48:36' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_013', userId: 'u_10013', userName: '罗宁', title: '安装服务预约', status: 'active', createdAt: '2026-06-22 16:12:00',
-    messages: [
-      { role: 'user', content: '洗碗机送到后怎么预约安装？', timestamp: '2026-06-22 16:12:02' },
-      { role: 'assistant', content: '您可在订单详情中点击预约安装，也可联系客服提供地址和可安装时间。', timestamp: '2026-06-22 16:12:10' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_014', userId: 'u_10014', userName: '马骁', title: '跨店满减退款影响', status: 'closed', createdAt: '2026-06-22 16:55:00',
-    messages: [
-      { role: 'user', content: '跨店满减订单退一件，会影响其他商品优惠吗？', timestamp: '2026-06-22 16:55:06' },
-      { role: 'assistant', content: '退款后若订单不再满足满减门槛，系统可能按比例扣回优惠，具体以退款页计算为准。', timestamp: '2026-06-22 16:55:14' },
-      { role: 'user', content: '那我实际退多少钱？', timestamp: '2026-06-22 16:55:31' },
-      { role: 'assistant', content: '请以退款申请页展示金额为准，系统会自动计算优惠分摊。', timestamp: '2026-06-22 16:55:38' }
-    ]
-  },
-  {
-    sessionId: 'sess_20260622_015', userId: 'u_10015', userName: '林澈', title: '企业采购开票与配送', status: 'active', createdAt: '2026-06-22 17:30:00',
-    messages: [
-      { role: 'user', content: '企业采购能不能开专票？', timestamp: '2026-06-22 17:30:05' },
-      { role: 'assistant', content: '支持开具专票的商品可在开票页面选择增值税专用发票，并填写企业资质。', timestamp: '2026-06-22 17:30:13' },
-      { role: 'user', content: '可以分批配送吗？', timestamp: '2026-06-22 17:30:40' },
-      { role: 'assistant', content: '是否支持分批配送取决于仓库库存和订单拆分规则，建议下单前联系人工确认。', timestamp: '2026-06-22 17:30:48' },
-      { role: 'user', content: '专票多久能开？', timestamp: '2026-06-22 17:31:10' },
-      { role: 'assistant', content: '通常在订单完成后按财务审核进度开具，具体时效以开票页面提示为准。', timestamp: '2026-06-22 17:31:18' },
-      { role: 'user', content: '能先发票后付款吗？', timestamp: '2026-06-22 17:31:42' },
-      { role: 'assistant', content: '平台订单通常需先完成支付，账期采购需确认是否开通企业采购协议。', timestamp: '2026-06-22 17:31:50' },
-      { role: 'user', content: '那帮我转企业客服。', timestamp: '2026-06-22 17:32:11' },
-      { role: 'assistant', content: '已为您转接企业采购客服，请准备公司名称和采购清单。', timestamp: '2026-06-22 17:32:19' },
-      { role: 'user', content: '谢谢。', timestamp: '2026-06-22 17:32:41' },
-      { role: 'assistant', content: '不客气，祝您采购顺利。', timestamp: '2026-06-22 17:32:48' }
+      { role: 'user', content: '新疆订单 48 小时发货，是 48 小时到吗？', timestamp: '2026-06-22 10:28:11' },
+      { role: 'assistant', content: '48 小时发货不等于 48 小时送达，新疆通常发货后 5-8 天送达。', timestamp: '2026-06-22 10:28:19' }
     ]
   }
 ].map((session) => ({ ...session, messageCount: session.messages.length }))
@@ -1678,37 +1067,29 @@ const sessionAuditKeyword = ref('')
 const sessionAuditStatus = ref('')
 const sessionAuditDateRange = ref([])
 const sessionAuditPage = ref(1)
-const sessionAuditPageSize = ref(5)
+const sessionAuditPageSize = 5
 const sessionDetailVisible = ref(false)
 const activeSessionDetail = ref(null)
-const selectedSessionIds = ref([])
 const sessionAuditList = ref([...SESSION_AUDIT_MOCK_SESSIONS])
 
-// 检索逻辑：关键词会同时匹配标题、用户ID、用户名称与任意消息正文，便于审计人员快速定位上下文。
-const sessionMatchesKeyword = (session, keyword) => {
-  if (!keyword) return true
-  const lowerKeyword = keyword.toLowerCase()
-  return [session.title, session.userId, session.userName, session.sessionId]
-    .some((field) => field.toLowerCase().includes(lowerKeyword)) ||
-    session.messages.some((message) => message.content.toLowerCase().includes(lowerKeyword))
-}
-
-// 数据过滤逻辑：所有过滤都在本地数组完成，状态、时间范围和关键词之间是 AND 关系。
 const filteredSessionAuditList = computed(() => {
-  const keyword = sessionAuditKeyword.value.trim()
+  const keyword = sessionAuditKeyword.value.trim().toLowerCase()
   const range = sessionAuditDateRange.value || []
   return sessionAuditList.value.filter((session) => {
     const createdTime = new Date(session.createdAt).getTime()
-    const matchKeyword = sessionMatchesKeyword(session, keyword)
+    const matchKeyword = !keyword ||
+      [session.title, session.userId, session.userName, session.sessionId].some((field) => field.toLowerCase().includes(keyword)) ||
+      session.messages.some((message) => message.content.toLowerCase().includes(keyword))
     const matchStatus = !sessionAuditStatus.value || session.status === sessionAuditStatus.value
     const matchStart = !range[0] || createdTime >= new Date(range[0]).getTime()
     const matchEnd = !range[1] || createdTime <= new Date(range[1]).getTime()
     return matchKeyword && matchStatus && matchStart && matchEnd
   })
 })
+
 const pagedSessionAuditList = computed(() => {
-  const start = (sessionAuditPage.value - 1) * sessionAuditPageSize.value
-  return filteredSessionAuditList.value.slice(start, start + sessionAuditPageSize.value)
+  const start = (sessionAuditPage.value - 1) * sessionAuditPageSize
+  return filteredSessionAuditList.value.slice(start, start + sessionAuditPageSize)
 })
 
 const resetSessionAuditFilters = () => {
@@ -1718,14 +1099,9 @@ const resetSessionAuditFilters = () => {
   sessionAuditPage.value = 1
 }
 
-// 会话隔离逻辑：详情抽屉只持有当前点击的单个 session，不混入其它会话消息。
 const openSessionDetail = (session) => {
   activeSessionDetail.value = session
   sessionDetailVisible.value = true
-}
-
-const handleSessionAuditSelection = (rows) => {
-  selectedSessionIds.value = rows.map((row) => row.sessionId)
 }
 
 const copySessionMessage = async (content) => {
@@ -1733,31 +1109,12 @@ const copySessionMessage = async (content) => {
     await navigator.clipboard.writeText(content)
     ElMessage.success('消息内容已复制')
   } catch (error) {
-    ElMessage.warning('当前浏览器不支持自动复制，请手动选择内容')
+    ElMessage.warning('当前浏览器不支持自动复制')
   }
 }
 
-const exportSelectedSessions = () => {
-  if (!selectedSessionIds.value.length) {
-    ElMessage.warning('请先选择需要导出的会话')
-    return
-  }
-  ElMessage.success('已模拟导出 ' + selectedSessionIds.value.length + ' 条会话')
-}
-
-const deleteSelectedSessions = () => {
-  if (!selectedSessionIds.value.length) {
-    ElMessage.warning('请先选择需要删除的会话')
-    return
-  }
-  ElMessageBox.confirm('确定删除选中的 ' + selectedSessionIds.value.length + ' 条会话吗？此操作仅移除前端Mock数据。', '批量删除确认', { type: 'warning' })
-    .then(() => {
-      sessionAuditList.value = sessionAuditList.value.filter((session) => !selectedSessionIds.value.includes(session.sessionId))
-      selectedSessionIds.value = []
-      sessionAuditPage.value = 1
-      ElMessage.success('已删除选中会话')
-    })
-    .catch(() => {})
+const simulateSessionExport = () => {
+  ElMessage.success('已模拟导出当前筛选结果')
 }
 
 onMounted(() => {
@@ -1769,321 +1126,258 @@ onMounted(() => {
 
 <style scoped>
 
-.rag-eval-workbench {
+.simple-dashboard,
+.simple-eval,
+.simple-session-audit {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.eval-topbar,
-.eval-filter,
-.eval-detail,
-.eval-sample-list {
-  border-color: #e5e7eb;
-}
-
-.eval-topbar {
+.module-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
 }
 
-.eval-topbar h2,
-.eval-section-title h3,
-.eval-question-block h3,
-.answer-card h3,
-.defect-panel h3 {
+.module-head.in-card {
+  padding: 0;
+  border: none;
+}
+
+.module-head h2 {
   margin: 0;
-  font-size: 15px;
-  color: #111827;
+  font-size: 18px;
+  color: #1d2129;
 }
 
-.eval-topbar p {
-  margin: 8px 0 0;
+.module-head p {
+  margin: 6px 0 0;
   font-size: 13px;
-  color: #64748b;
+  color: #86909c;
 }
 
-.eval-actions,
-.eval-filter,
-.eval-detail-head,
-.eval-section-title,
-.doc-title {
+.module-actions,
+.compact-toolbar {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
-.eval-actions {
-  flex: none;
+.compact-toolbar {
+  flex-wrap: wrap;
+}
+
+.compact-toolbar :deep(.el-input) {
+  width: 280px;
+}
+
+.compact-toolbar :deep(.el-select),
+.compact-toolbar :deep(.el-date-editor) {
+  width: 220px;
+}
+
+.dashboard-summary-grid,
+.dashboard-simple-grid,
+.simple-eval-grid,
+.answer-simple-grid,
+.score-simple-grid,
+.report-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-card span,
+.summary-card small {
+  display: block;
+  color: #86909c;
+}
+
+.summary-card strong {
+  display: block;
+  margin: 10px 0;
+  font-size: 26px;
+  color: #1d2129;
+}
+
+.up {
+  color: #00a870 !important;
+}
+
+.down {
+  color: #f53f3f !important;
+}
+
+.dashboard-simple-grid,
+.answer-simple-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.simple-bars,
+.simple-rank-list,
+.simple-alert-list,
+.session-message-flow {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.eval-filter {
-  flex-wrap: wrap;
+.simple-bar-row,
+.simple-rank-list div,
+.card-header-line,
+.message-meta {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.eval-filter :deep(.el-select) {
-  width: 180px;
+.simple-bar-row span {
+  width: 56px;
+  color: #4e5969;
 }
 
-.eval-keyword {
-  width: 320px;
+.simple-bar-track {
+  flex: 1;
+  height: 10px;
+  overflow: hidden;
+  background: #eef2f7;
+  border-radius: 999px;
 }
 
-.eval-workspace {
+.simple-bar-track i {
+  display: block;
+  height: 100%;
+  background: #2362fb;
+}
+
+.simple-bar-row em,
+.simple-rank-list em {
+  font-style: normal;
+  color: #4e5969;
+}
+
+.simple-rank-list b {
   display: grid;
-  grid-template-columns: 430px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+  place-items: center;
+  background: #2362fb;
+  border-radius: 6px;
 }
 
-.eval-section-title {
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.simple-rank-list span {
+  flex: 1;
 }
 
-.eval-section-title span,
-.eval-detail-head span,
-.doc-title span {
-  font-size: 12px;
-  color: #64748b;
+.simple-alert-item,
+.simple-block,
+.session-message {
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 8px;
 }
 
-.eval-sample-list :deep(.active-eval-row td) {
-  background: #eef4ff !important;
+.simple-alert-item p,
+.simple-block p,
+.session-detail-summary p,
+.session-message p {
+  margin: 8px 0 0;
+  line-height: 1.7;
+  color: #4e5969;
 }
 
-.eval-pagination {
+.simple-eval-grid {
+  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1.2fr);
+}
+
+.simple-pagination {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
-.eval-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.eval-detail-head {
+.card-header-line {
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eef2f7;
 }
 
-.eval-detail-head > div {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.simple-block h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #1d2129;
 }
 
-.eval-question-block,
-.eval-doc-block,
-.score-panel,
-.defect-panel,
-.eval-question-block p,
-.answer-card p,
-.doc-content {
-  margin: 10px 0 0;
-  line-height: 1.7;
-  color: #334155;
-}
-
-.retrieval-collapse {
-  background: #ffffff;
-  border-radius: 8px;
-}
-
-.doc-title {
-  width: 100%;
-  justify-content: space-between;
-  gap: 12px;
-  padding-right: 12px;
-}
-
-.answer-compare-grid,
-.eval-input-grid {
-  display: grid;
+.score-simple-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
 }
 
-.answer-card {
-  min-height: 150px;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-}
-
-.rag-answer {
-  background: #fff7ed;
-  border-color: #fed7aa;
-}
-
-.standard-answer {
-  background: #ecfdf5;
-  border-color: #bbf7d0;
-}
-
-.score-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
-  gap: 12px;
-}
-
-.score-grid :deep(.el-form-item) {
-  display: block;
-  margin-bottom: 0;
-}
-
-.score-grid :deep(.el-input-number) {
+.score-simple-grid :deep(.el-input-number) {
   width: 100%;
 }
 
-.defect-tags {
+.simple-checkbox-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.eval-input-grid :deep(.el-form-item) {
-  display: block;
-  margin-bottom: 0;
+  gap: 10px 18px;
 }
 
 .eval-error-text {
   margin-top: 6px;
   font-size: 12px;
-  line-height: 1.4;
-  color: #dc2626;
+  color: #f53f3f;
 }
 
-.score-panel :deep(.el-form-item.is-error .el-input-number__wrapper),
-.eval-input-grid :deep(.el-form-item.is-error .el-textarea__inner) {
-  box-shadow: 0 0 0 1px #ef4444 inset;
+.active-eval-row td {
+  background: #eef4ff !important;
 }
 
-@media (max-width: 1280px) {
-  .eval-workspace {
+.report-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.report-summary div {
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 8px;
+}
+
+.report-summary span,
+.report-summary strong {
+  display: block;
+}
+
+.report-summary span {
+  color: #86909c;
+}
+
+.report-summary strong {
+  margin-top: 8px;
+  font-size: 22px;
+  color: #1d2129;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-summary-grid,
+  .dashboard-simple-grid,
+  .simple-eval-grid,
+  .answer-simple-grid,
+  .score-simple-grid,
+  .report-summary {
     grid-template-columns: 1fr;
   }
 
-  .score-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 860px) {
-  .eval-topbar,
-  .eval-detail-head {
+  .module-head {
     align-items: flex-start;
     flex-direction: column;
   }
-
-  .eval-actions,
-  .eval-filter,
-  .answer-compare-grid,
-  .eval-input-grid,
-  .score-grid {
-    grid-template-columns: 1fr;
-    width: 100%;
-  }
-
-  .eval-keyword,
-  .eval-filter :deep(.el-select) {
-    width: 100%;
-  }
 }
 
-
-.commerce-dashboard { min-height: calc(100vh - 108px); color: #1f2937; }
-.dashboard-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - 108px); overflow: hidden; background: #f3f6fb; border: 1px solid #e5e7eb; border-radius: 8px; }
-.dashboard-sidebar { padding: 18px 14px; background: #101828; border-right: 1px solid rgba(255, 255, 255, 0.08); }
-.brand-block { display: flex; gap: 12px; align-items: center; padding: 0 8px 18px; color: #ffffff; }
-.brand-logo { display: grid; width: 36px; height: 36px; font-weight: 700; color: #ffffff; place-items: center; background: #2f6fed; border-radius: 8px; }
-.brand-block strong, .brand-block span { display: block; }
-.brand-block span { margin-top: 4px; font-size: 12px; color: #98a2b3; }
-.dashboard-menu { --el-menu-bg-color: transparent; --el-menu-text-color: #cbd5e1; --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08); --el-menu-active-color: #ffffff; border-right: none; }
-.dashboard-menu :deep(.el-sub-menu__title), .dashboard-menu :deep(.el-menu-item) { border-radius: 8px; }
-.dashboard-main { min-width: 0; padding: 18px; overflow-y: auto; }
-.dashboard-header, .dashboard-breadcrumb-row, .dashboard-filter, .kpi-card, .dashboard-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; }
-.dashboard-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
-.header-left, .header-actions, .dashboard-breadcrumb-row, .dashboard-toolbar-actions, .compare-row, .card-title-row, .legend-row, .heat-meta, .review-item, .layout-config-item { display: flex; align-items: center; }
-.header-left { flex: 1; gap: 18px; min-width: 0; }
-.header-logo { flex: none; font-size: 17px; font-weight: 700; color: #111827; }
-.global-search { max-width: 420px; }
-.header-actions { gap: 12px; }
-.dashboard-breadcrumb-row { justify-content: space-between; margin-top: 14px; padding: 12px 16px; }
-.dashboard-toolbar-actions { gap: 10px; }
-.dashboard-filter { flex-wrap: wrap; margin-top: 14px; padding: 14px; }
-.dashboard-filter :deep(.el-date-editor), .dashboard-filter :deep(.el-select) { width: 220px; }
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
-.kpi-card { padding: 18px; }
-.kpi-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: #64748b; }
-.kpi-card strong { display: block; margin-bottom: 12px; font-size: 28px; color: #111827; }
-.compare-row { gap: 12px; font-size: 12px; }
-.up { color: #059669; }
-.down { color: #dc2626; }
-.dashboard-layout-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: stretch; margin-top: 14px; }
-.dashboard-card { display: flex; flex-direction: column; min-width: 0; min-height: 280px; padding: 16px; }
-.span-4 { grid-column: span 4; }
-.span-8 { grid-column: span 8; }
-.span-12 { grid-column: span 12; }
-.card-title-row { justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.card-title-row h3 { margin: 0; font-size: 15px; color: #111827; }
-.card-title-row span { font-size: 12px; color: #64748b; }
-.trend-chart { flex: 1; min-height: 230px; }
-.trend-chart svg { width: 100%; height: 185px; background: linear-gradient(#ffffff 24px, #f8fafc 25px); background-size: 100% 40px; border: 1px solid #eef2f7; border-radius: 8px; }
-.chart-axis { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 8px; font-size: 12px; color: #64748b; text-align: center; }
-.legend-row { gap: 18px; font-size: 12px; color: #475467; }
-.legend::before { display: inline-block; width: 9px; height: 9px; margin-right: 6px; content: ''; border-radius: 50%; }
-.legend.blue::before { background: #2f6fed; }
-.legend.green::before { background: #12b981; }
-.pie-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.pie-block { display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 16px; align-items: center; }
-.donut { display: grid; width: 138px; height: 138px; place-items: center; border-radius: 50%; }
-.donut span { display: grid; width: 76px; height: 76px; font-weight: 700; color: #334155; place-items: center; background: #ffffff; border-radius: 50%; }
-.pie-legend p { margin: 8px 0; font-size: 13px; color: #475467; }
-.pie-legend i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; }
-.rank-list, .heat-list, .mini-alert-list, .review-list, .alert-stack, .layout-config-list { display: flex; flex: 1; flex-direction: column; gap: 10px; }
-.rank-item { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: center; padding: 10px; background: #f8fafc; border-radius: 8px; }
-.rank-item b { display: grid; width: 26px; height: 26px; color: #ffffff; place-items: center; background: #2f6fed; border-radius: 6px; }
-.rank-item strong, .rank-item span, .review-item strong, .review-item span { display: block; }
-.rank-item span, .review-item span { margin-top: 4px; font-size: 12px; color: #64748b; }
-.heat-meta { justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-.heat-meta em { font-style: normal; color: #2f6fed; }
-.heat-bar { height: 30px; overflow: hidden; border-radius: 8px; }
-.heat-bar span { display: inline-flex; align-items: center; height: 30px; padding-left: 10px; font-size: 12px; color: #334155; }
-.visitor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.visitor-item { padding: 12px; background: #f8fafc; border-radius: 8px; }
-.visitor-item span, .visitor-item small, .visitor-item strong { display: block; }
-.visitor-item strong { margin: 8px 0; font-size: 24px; color: #111827; }
-.visitor-item small { color: #64748b; }
-.mini-alert, .alert-item { padding: 12px; border: 1px solid #e5e7eb; border-left-width: 4px; border-radius: 8px; }
-.mini-alert strong, .mini-alert span, .alert-item strong, .alert-item p { display: block; }
-.mini-alert span, .alert-item p { margin: 6px 0 0; font-size: 12px; color: #64748b; }
-.mini-alert.danger, .alert-item.danger { border-left-color: #ef4444; }
-.mini-alert.warning, .alert-item.warning { border-left-color: #f59e0b; }
-.mini-alert.info, .alert-item.info { border-left-color: #2f6fed; }
-.alert-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.review-item { justify-content: space-between; gap: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; }
-.review-item em { flex: none; padding: 3px 8px; font-size: 12px; font-style: normal; color: #b45309; background: #fff7ed; border-radius: 999px; }
-.record-actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 12px; }
-.table-card { min-height: 420px; }
-.table-card :deep(.el-table) { border-radius: 8px; }
-.pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
-.layout-config-item { justify-content: space-between; padding: 12px; border: 1px solid #eef2f7; border-radius: 8px; }
-.dark-theme .dashboard-shell { background: #111827; border-color: #334155; }
-.dark-theme .dashboard-header, .dark-theme .dashboard-breadcrumb-row, .dark-theme .dashboard-filter, .dark-theme .kpi-card, .dark-theme .dashboard-card { color: #e5e7eb; background: #182230; border-color: #334155; }
-.dark-theme .header-logo, .dark-theme .kpi-card strong, .dark-theme .card-title-row h3, .dark-theme .visitor-item strong { color: #f8fafc; }
-.dark-theme .visitor-item, .dark-theme .rank-item, .dark-theme .review-item, .dark-theme .trend-chart svg { background: #101828; }
-@media (max-width: 1280px) { .dashboard-shell { grid-template-columns: 1fr; } .dashboard-sidebar { display: none; } .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .span-4, .span-8, .span-12 { grid-column: span 1; } .table-card { grid-column: span 2; } }
-@media (max-width: 860px) { .dashboard-header, .dashboard-breadcrumb-row { align-items: flex-start; flex-direction: column; gap: 12px; } .header-left { align-items: stretch; flex-direction: column; width: 100%; } .global-search { max-width: none; } .kpi-grid, .dashboard-layout-grid, .pie-grid, .pie-block, .visitor-grid { grid-template-columns: 1fr; } .span-4, .span-8, .span-12, .table-card { grid-column: span 1; } }
 
 .pane-card {
   padding: 20px;
@@ -2238,122 +1532,34 @@ onMounted(() => {
 }
 
 
-.session-audit-management {
-  display: block;
-}
-
-.session-audit-card {
-  border-radius: 8px;
-}
-
-.session-audit-header,
-.session-audit-actions,
-.session-audit-filter,
-.session-audit-pagination,
-.session-detail-summary {
-  display: flex;
-  align-items: center;
-}
-
-.session-audit-header {
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.session-audit-header h3,
-.session-detail-summary h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #1d2129;
-}
-
-.session-audit-header p,
-.session-detail-summary p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: #86909c;
-}
-
-.session-audit-actions,
-.session-audit-filter {
-  gap: 12px;
-}
-
-.session-audit-filter {
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.session-audit-keyword {
-  width: 320px;
-}
-
-.session-audit-pagination {
-  justify-content: flex-end;
-  margin-top: 16px;
+.simple-session-audit :deep(.el-card__header) {
+  padding: 16px 20px;
 }
 
 .session-detail-summary {
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
   border-bottom: 1px solid #eef2f7;
 }
 
-.session-message-flow {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-height: calc(100vh - 170px);
-  padding: 16px 4px 0;
-  overflow-y: auto;
-}
-
-.session-message {
-  max-width: 86%;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+.session-detail-summary h3 {
+  margin: 0;
+  color: #1d2129;
 }
 
 .session-message.user {
-  align-self: flex-start;
-  background: #f8fafc;
+  background: #eef4ff;
 }
 
 .session-message.assistant {
-  align-self: flex-end;
-  background: #ecfdf5;
-  border-color: #bbf7d0;
+  background: #f7f8fa;
 }
 
 .message-meta {
-  display: flex;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 8px;
   font-size: 12px;
-  color: #64748b;
+  color: #86909c;
 }
 
-.session-message p {
-  margin: 0 0 8px;
-  line-height: 1.7;
-  color: #1f2937;
-}
-
-@media (max-width: 860px) {
-  .session-audit-header,
-  .session-detail-summary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .session-audit-keyword,
-  .session-audit-filter :deep(.el-date-editor),
-  .session-audit-filter :deep(.el-select) {
-    width: 100%;
-  }
-}
 
 </style>

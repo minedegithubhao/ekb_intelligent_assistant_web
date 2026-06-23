@@ -329,6 +329,7 @@
         </el-select>
         <el-button type="primary" @click="fetchKBs">查询</el-button>
         <el-button type="primary" plain class="right-action" @click="kbUploadVisible = true">上传知识库</el-button>
+        <el-button type="primary" plain @click="jsonImportVisible = true">JSON 入库</el-button>
       </div>
 
       <el-table :data="kbList" style="width: 100%">
@@ -365,80 +366,272 @@
       </el-table>
     </section>
 
-    <section v-if="currentTab === 'evaluations'">
-      <div v-if="!activeEvalId" class="pane-card">
+    <section v-if="currentTab === 'evaluations'" class="evaluation-workbench">
+      <div class="evaluation-tabs" role="tablist" aria-label="评估管理">
+        <button
+          v-for="tab in evaluationTabs"
+          :key="tab.name"
+          type="button"
+          class="evaluation-tab"
+          :class="{ active: evaluationTab === tab.name }"
+          @click="evaluationTab = tab.name"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <section v-if="evaluationTab === 'datasets'" class="pane-card">
         <div class="filter-wrapper">
-          <el-select v-model="evalQuery.status" placeholder="任务状态" class="filter-item" clearable>
-            <el-option label="待执行" value="pending" />
-            <el-option label="执行中" value="running" />
-            <el-option label="已完成" value="completed" />
-            <el-option label="执行失败" value="failed" />
+          <el-input v-model="datasetQuery.keyword" placeholder="评估集名称 / ID" class="filter-item history-search-input" clearable />
+          <el-select v-model="datasetQuery.type" placeholder="评估类型" class="filter-item" clearable>
+            <el-option label="retrieval_eval" value="retrieval_eval" />
+            <el-option label="mixed" value="mixed" />
           </el-select>
-          <el-button type="primary" @click="fetchEvals">查询</el-button>
-          <el-button type="primary" class="right-action" @click="createEvalVisible = true">新建评估任务</el-button>
+          <el-button type="primary" @click="fetchEvaluationDatasets">查询</el-button>
+          <el-button type="primary" plain class="right-action" @click="createEvalDataset">新建评估集</el-button>
+          <el-button type="primary" plain @click="importEvalSamples()">导入样本</el-button>
         </div>
 
-        <el-table :data="evalList" style="width: 100%">
-          <el-table-column prop="evaluationId" label="任务ID" width="130" />
-          <el-table-column prop="name" label="任务名称" />
-          <el-table-column prop="knowledgeBaseName" label="关联知识库" />
-          <el-table-column prop="status" label="状态">
+        <el-table :data="filteredEvaluationDatasets" style="width: 100%">
+          <el-table-column prop="datasetId" label="评估集ID" min-width="190" />
+          <el-table-column prop="name" label="评估集名称" min-width="220" />
+          <el-table-column label="适用类型" width="150">
             <template #default="scope">
-              <el-tag :type="getEvalTagType(scope.row.status)">{{ scope.row.status }}</el-tag>
+              <el-tag :type="scope.row.type === 'mixed' ? 'warning' : 'primary'" effect="plain">
+                {{ scope.row.type }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="averageScore" label="平均分">
+          <el-table-column prop="sampleCount" label="样本数" width="110" align="center" />
+          <el-table-column prop="createdAt" label="创建时间" width="180" />
+          <el-table-column label="操作" width="220" fixed="right">
             <template #default="scope">
-              <span v-if="scope.row.averageScore" class="score-text">{{ scope.row.averageScore }}</span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="160">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewEvalDetail(scope.row.evaluationId)">查看报告</el-button>
-              <el-button link type="danger" @click="deleteEval(scope.row.evaluationId)">删除</el-button>
+              <el-button link type="primary" @click="viewDatasetSamples(scope.row)">查看样本</el-button>
+              <el-button link type="primary" @click="importEvalSamples(scope.row)">导入</el-button>
+              <el-button link type="danger" @click="deleteEvalDataset(scope.row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
-      </div>
+      </section>
 
-      <div v-else class="eval-detail-container">
-        <el-button :icon="ArrowLeft" class="back-btn" @click="activeEvalId = null">返回列表</el-button>
-
-        <div class="metrics-grid">
-          <div class="metric-card highlight">
-            <div class="m-label">平均总得分</div>
-            <div class="m-val">{{ evalDetail.summary?.averageScore }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">检索召回</div>
-            <div class="m-val">{{ evalDetail.summary?.retrievalRecall }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">回答相关性</div>
-            <div class="m-val">{{ evalDetail.summary?.answerRelevance }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">忠实度</div>
-            <div class="m-val">{{ evalDetail.summary?.faithfulness }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="m-label">回答质量</div>
-            <div class="m-val">{{ evalDetail.summary?.responseQuality }}</div>
+      <section v-if="evaluationTab === 'ingestion'" class="evaluation-panel">
+        <div class="pane-card">
+          <div class="filter-wrapper">
+            <el-select v-model="ingestionForm.kbVersion" placeholder="知识库版本" class="filter-item">
+              <el-option label="kb_v1" value="kb_v1" />
+              <el-option label="kb_v2" value="kb_v2" />
+            </el-select>
+            <el-input v-model="ingestionForm.minLength" placeholder="最短 80 字" class="filter-item" />
+            <el-input v-model="ingestionForm.maxLength" placeholder="最长 1800 字" class="filter-item" />
+            <el-input v-model="ingestionForm.duplicateThreshold" placeholder="重复阈值 0.95" class="filter-item" />
+            <el-button type="primary" @click="runIngestionEvaluation">开始评估</el-button>
           </div>
         </div>
 
-        <div class="pane-card table-wrapper">
-          <h2>评测样本细则（共 {{ evalDetail.summary?.questionCount }} 项）</h2>
-          <el-table :data="evalDetail.items" border style="width: 100%">
-            <el-table-column prop="question" label="评估问题" width="240" />
-            <el-table-column prop="answer" label="大模型输出回答" show-overflow-tooltip />
-            <el-table-column prop="score" label="单项得分" width="100" align="center" />
-            <el-table-column prop="retrievedDocumentCount" label="检索文档数" width="110" align="center" />
-            <el-table-column prop="comment" label="分析评语" />
+        <div class="eval-metric-grid">
+          <div class="metric-card">
+            <div class="m-label">总 Chunk 数</div>
+            <div class="m-val">{{ ingestionMetrics.totalChunks }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">低质量 Chunk</div>
+            <div class="m-val warning">{{ ingestionMetrics.lowQualityChunks }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">过短率</div>
+            <div class="m-val primary">{{ ingestionMetrics.tooShortRate }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">重复率</div>
+            <div class="m-val danger">{{ ingestionMetrics.duplicateRate }}</div>
+          </div>
+        </div>
+
+        <div class="pane-card">
+          <h3 class="section-heading">问题 Chunk 明细</h3>
+          <el-table :data="problemChunks" style="width: 100%">
+            <el-table-column prop="chunkId" label="chunk_id" width="140" />
+            <el-table-column prop="ruleId" label="规则ID" width="190" />
+            <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
+            <el-table-column prop="length" label="长度" width="100" align="center" />
+            <el-table-column label="问题类型" width="120">
+              <template #default="scope">
+                <el-tag :type="scope.row.issueType === '重复' ? 'success' : 'warning'" effect="plain">
+                  {{ scope.row.issueType }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="similarity" label="相似度" width="120" align="center" />
           </el-table>
         </div>
-      </div>
+      </section>
+
+      <section v-if="evaluationTab === 'retrieval'" class="evaluation-panel">
+        <template v-if="!activeRetrievalDetail">
+          <div class="pane-card">
+            <div class="filter-wrapper">
+              <el-select v-model="retrievalForm.datasetId" placeholder="评估集" class="filter-item wide-select">
+                <el-option
+                  v-for="item in evaluationDatasets"
+                  :key="item.datasetId"
+                  :label="item.datasetId"
+                  :value="item.datasetId"
+                />
+              </el-select>
+              <el-select v-model="retrievalForm.kbVersion" placeholder="知识库版本" class="filter-item">
+                <el-option label="kb_v1" value="kb_v1" />
+                <el-option label="kb_v2" value="kb_v2" />
+              </el-select>
+              <el-input v-model="retrievalForm.faqTopK" placeholder="FAQ TopK 5" class="filter-item" />
+              <el-input v-model="retrievalForm.kbTopK" placeholder="KB TopK 10" class="filter-item" />
+              <el-button type="primary" @click="createRetrievalEvaluation">新建检索评估</el-button>
+            </div>
+
+            <el-table :data="retrievalEvaluations" style="width: 100%">
+              <el-table-column prop="taskId" label="任务ID" min-width="170" />
+              <el-table-column prop="datasetId" label="评估集" min-width="190" />
+              <el-table-column prop="kbVersion" label="知识库版本" width="130" />
+              <el-table-column label="状态" width="120">
+                <template #default="scope">
+                  <el-tag :type="getEvalTagType(scope.row.status)" effect="plain">{{ scope.row.status }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="faqHitAt5" label="FAQ Hit@5" width="130">
+                <template #default="scope"><span class="score-text">{{ scope.row.faqHitAt5 || '-' }}</span></template>
+              </el-table-column>
+              <el-table-column prop="kbRecallAt10" label="KB Recall@10" width="140">
+                <template #default="scope"><span class="score-text">{{ scope.row.kbRecallAt10 || '-' }}</span></template>
+              </el-table-column>
+              <el-table-column prop="kbMrrAt10" label="KB MRR@10" width="130">
+                <template #default="scope"><span class="score-text">{{ scope.row.kbMrrAt10 || '-' }}</span></template>
+              </el-table-column>
+              <el-table-column label="操作" width="180" fixed="right">
+                <template #default="scope">
+                  <el-button link type="primary" @click="openRetrievalDetail(scope.row)">查看详情</el-button>
+                  <el-button link type="primary" @click="rerunRetrievalEvaluation(scope.row)">重新执行</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </template>
+
+        <template v-else>
+          <el-button :icon="ArrowLeft" class="back-btn" @click="activeRetrievalDetail = null">返回列表</el-button>
+          <div class="eval-metric-grid">
+            <div class="metric-card">
+              <div class="m-label">FAQ Hit Rate@5</div>
+              <div class="m-val primary">{{ activeRetrievalDetail.faqHitAt5 }}</div>
+            </div>
+            <div class="metric-card">
+              <div class="m-label">KB Recall@10</div>
+              <div class="m-val primary">{{ activeRetrievalDetail.kbRecallAt10 }}</div>
+            </div>
+            <div class="metric-card">
+              <div class="m-label">KB MRR@10</div>
+              <div class="m-val">{{ activeRetrievalDetail.kbMrrAt10 }}</div>
+            </div>
+            <div class="metric-card">
+              <div class="m-label">错误数</div>
+              <div class="m-val danger">{{ activeRetrievalDetail.errorCount }}</div>
+            </div>
+          </div>
+
+          <div class="eval-detail-split">
+            <div class="pane-card">
+              <h3 class="section-heading">单题结果</h3>
+              <el-table :data="retrievalCaseResults" style="width: 100%" @row-click="activeRetrievalCase = $event">
+                <el-table-column prop="caseId" label="case_id" width="130" />
+                <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
+                <el-table-column prop="faqHit" label="FAQ命中" width="100" align="center" />
+                <el-table-column prop="kbRecall" label="KB Recall" width="110" align="center" />
+                <el-table-column prop="kbRr" label="KB RR" width="100" align="center" />
+              </el-table>
+            </div>
+
+            <div class="pane-card">
+              <h3 class="section-heading">{{ activeRetrievalCase.caseId }} 召回详情</h3>
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="原始问题">{{ activeRetrievalCase.question }}</el-descriptions-item>
+                <el-descriptions-item label="改写问题">{{ activeRetrievalCase.rewrittenQuestion }}</el-descriptions-item>
+                <el-descriptions-item label="期望规则">{{ activeRetrievalCase.expectedRuleId }}</el-descriptions-item>
+              </el-descriptions>
+
+              <div class="hit-list">
+                <div v-for="hit in activeRetrievalCase.hits" :key="hit.id" class="hit-item">
+                  <div class="hit-head">
+                    <strong>{{ hit.title }}</strong>
+                    <span>{{ hit.score }}</span>
+                  </div>
+                  <p>{{ hit.preview }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <section v-if="evaluationTab === 'records'" class="evaluation-panel">
+        <div class="pane-card">
+          <div class="filter-wrapper">
+            <el-select v-model="recordQuery.type" placeholder="评估类型" class="filter-item" clearable>
+              <el-option label="检索评估" value="retrieval" />
+              <el-option label="入库质量" value="ingestion" />
+            </el-select>
+            <el-select v-model="recordQuery.status" placeholder="任务状态" class="filter-item" clearable>
+              <el-option label="completed" value="completed" />
+              <el-option label="running" value="running" />
+              <el-option label="failed" value="failed" />
+            </el-select>
+            <el-input v-model="recordQuery.keyword" placeholder="任务ID / 评估集 / 知识库版本" class="filter-item history-search-input" clearable />
+            <el-button type="primary" @click="fetchEvaluationRecords">查询</el-button>
+          </div>
+
+          <el-table :data="filteredEvaluationRecords" style="width: 100%">
+            <el-table-column prop="taskId" label="任务ID" min-width="170" />
+            <el-table-column label="评估类型" width="120">
+              <template #default="scope">
+                <el-tag :type="scope.row.type === 'retrieval' ? 'primary' : 'warning'" effect="plain">
+                  {{ scope.row.typeName }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="datasetId" label="评估集" min-width="170" />
+            <el-table-column prop="kbVersion" label="知识库版本" width="130" />
+            <el-table-column label="状态" width="120">
+              <template #default="scope">
+                <el-tag :type="getEvalTagType(scope.row.status)" effect="plain">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="metrics" label="核心指标" min-width="280" show-overflow-tooltip />
+            <el-table-column prop="finishedAt" label="完成时间" width="180" />
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="scope">
+                <el-button link type="primary" @click="viewEvaluationRecord(scope.row)">查看详情</el-button>
+                <el-button link type="primary" @click="rerunEvaluationRecord(scope.row)">重新执行</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div class="eval-detail-split">
+          <div class="pane-card">
+            <h3 class="section-heading">最近一次检索评估</h3>
+            <div class="mini-metric-grid">
+              <div class="metric-card"><div class="m-label">FAQ Hit@5</div><div class="m-val primary">81.25%</div></div>
+              <div class="metric-card"><div class="m-label">KB Recall@10</div><div class="m-val primary">86.67%</div></div>
+              <div class="metric-card"><div class="m-label">KB MRR@10</div><div class="m-val">0.742</div></div>
+            </div>
+          </div>
+          <div class="pane-card">
+            <h3 class="section-heading">最近一次入库质量评估</h3>
+            <div class="mini-metric-grid">
+              <div class="metric-card"><div class="m-label">低质量 Chunk</div><div class="m-val warning">340</div></div>
+              <div class="metric-card"><div class="m-label">过短率</div><div class="m-val primary">4.0%</div></div>
+              <div class="metric-card"><div class="m-label">重复率</div><div class="m-val danger">2.0%</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
 
     <el-drawer v-model="historyDrawerVisible" size="560px" :title="activeHistorySession?.title || '会话消息列表'">
@@ -606,13 +799,33 @@
         <el-form-item label="知识库名称" required>
           <el-input v-model="kbForm.name" placeholder="请输入知识库名称" />
         </el-form-item>
+        <el-form-item label="入库方式" required>
+          <el-select v-model="kbForm.ingestionType" placeholder="请选择入库方式" style="width: 100%">
+            <el-option label="FAQ 入库" value="faq" />
+            <el-option label="文档入库" value="document" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="业务描述">
           <el-input v-model="kbForm.description" type="textarea" placeholder="说明该知识库的知识覆盖范围" />
         </el-form-item>
         <el-form-item label="文件上传">
-          <el-upload class="upload-drag" drag action="#" :auto-upload="false">
+          <el-upload
+            v-model:file-list="kbUploadFiles"
+            class="upload-drag"
+            drag
+            action="#"
+            :auto-upload="false"
+            :accept="kbForm.ingestionType === 'document' ? '.csv,.md' : undefined"
+            :on-change="handleKbFileChange"
+            :on-remove="handleKbFileRemove"
+          >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
             <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
+            <template #tip>
+              <div class="el-upload__tip">
+                文档入库当前仅支持 CSV 和 Markdown(.md) 文件。
+              </div>
+            </template>
           </el-upload>
         </el-form-item>
         <div class="two-column">
@@ -633,35 +846,38 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="createEvalVisible" title="发起 RAG 评估任务" width="540px">
-      <el-form :model="newEvalForm" label-position="top">
-        <el-form-item label="评估任务名称" required>
-          <el-input v-model="newEvalForm.name" placeholder="例如：核心业务库第二轮评测" />
+    <el-dialog v-model="jsonImportVisible" title="JSON 入库" width="520px">
+      <el-form :model="jsonImportForm" label-position="top">
+        <el-form-item label="知识库名称" required>
+          <el-input v-model="jsonImportForm.name" placeholder="请输入知识库名称" />
         </el-form-item>
-        <el-form-item label="目标评估知识库" required>
-          <el-select v-model="newEvalForm.knowledgeBaseId" style="width: 100%">
-            <el-option
-              v-for="item in kbList"
-              :key="item.knowledgeBaseId"
-              :label="item.name"
-              :value="item.knowledgeBaseId"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="选择评估指标">
-          <el-checkbox-group v-model="newEvalForm.metrics">
-            <el-checkbox value="retrieval_recall">检索召回率</el-checkbox>
-            <el-checkbox value="answer_relevance">回答相关性</el-checkbox>
-            <el-checkbox value="faithfulness">忠实度</el-checkbox>
-            <el-checkbox value="response_quality">综合回答质量</el-checkbox>
-          </el-checkbox-group>
+        <el-form-item label="文档上传" required>
+          <el-upload
+            v-model:file-list="jsonImportFiles"
+            class="upload-drag"
+            drag
+            action="#"
+            :auto-upload="false"
+            accept=".json"
+            :on-change="handleJsonFileChange"
+            :on-remove="handleJsonFileRemove"
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">将 JSON 文件拖到此处，或 <em>点击上传</em></div>
+            <template #tip>
+              <div class="el-upload__tip">
+                当前仅开放前端入口，后端 JSON 入库接口待接入。
+              </div>
+            </template>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createEvalVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreateEval">提交任务</el-button>
+        <el-button @click="jsonImportVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitJsonImport">开始入库</el-button>
       </template>
     </el-dialog>
+
   </AdminLayout>
 </template>
 
@@ -1375,7 +1591,21 @@ const removeTerm = (row) => {
 const kbQuery = reactive({ keyword: '', status: '' })
 const kbList = ref([])
 const kbUploadVisible = ref(false)
-const kbForm = reactive({ name: '', description: '', chunkSize: 500, chunkOverlap: 50, autoEnable: true })
+const jsonImportVisible = ref(false)
+const kbUploadFiles = ref([])
+const jsonImportFiles = ref([])
+const kbForm = reactive({
+  name: '',
+  ingestionType: 'document',
+  description: '',
+  chunkSize: 500,
+  chunkOverlap: 50,
+  autoEnable: true
+})
+const jsonImportForm = reactive({
+  name: ''
+})
+const supportedDocumentExtensions = ['csv', 'md']
 
 const fetchKBs = () => {
   kbList.value = [
@@ -1408,10 +1638,82 @@ const updateKbStatus = (id, targetStatus) => {
   fetchKBs()
 }
 
+const getFileExtension = (fileName = '') => {
+  const normalizedName = fileName.toLowerCase()
+  const index = normalizedName.lastIndexOf('.')
+  return index > -1 ? normalizedName.slice(index + 1) : ''
+}
+
+const isSupportedDocumentFile = (fileName = '') => supportedDocumentExtensions.includes(getFileExtension(fileName))
+const isJsonFile = (fileName = '') => getFileExtension(fileName) === 'json'
+
+const handleKbFileChange = (uploadFile, uploadFiles) => {
+  if (kbForm.ingestionType === 'document' && !isSupportedDocumentFile(uploadFile.name)) {
+    ElMessage.error('文档入库当前仅支持 CSV 和 Markdown(.md) 文件')
+    kbUploadFiles.value = uploadFiles.filter((file) => file.uid !== uploadFile.uid)
+    return false
+  }
+
+  kbUploadFiles.value = uploadFiles
+  return true
+}
+
+const handleKbFileRemove = (_uploadFile, uploadFiles) => {
+  kbUploadFiles.value = uploadFiles
+}
+
+const handleJsonFileChange = (uploadFile, uploadFiles) => {
+  if (!isJsonFile(uploadFile.name)) {
+    ElMessage.error('JSON 入库当前仅支持 .json 文件')
+    jsonImportFiles.value = uploadFiles.filter((file) => file.uid !== uploadFile.uid)
+    return false
+  }
+
+  jsonImportFiles.value = uploadFiles
+  return true
+}
+
+const handleJsonFileRemove = (_uploadFile, uploadFiles) => {
+  jsonImportFiles.value = uploadFiles
+}
+
 const submitKbUpload = () => {
+  if (!kbForm.ingestionType) {
+    ElMessage.error('请选择入库方式')
+    return
+  }
+
+  if (
+    kbForm.ingestionType === 'document' &&
+    kbUploadFiles.value.some((file) => !isSupportedDocumentFile(file.name))
+  ) {
+    ElMessage.error('文档入库当前仅支持 CSV 和 Markdown(.md) 文件')
+    return
+  }
+
   ElMessage.success('知识库信息已提交')
   kbUploadVisible.value = false
   fetchKBs()
+}
+
+const submitJsonImport = () => {
+  if (!jsonImportForm.name.trim()) {
+    ElMessage.error('请输入知识库名称')
+    return
+  }
+
+  if (jsonImportFiles.value.length === 0) {
+    ElMessage.error('请上传 JSON 文件')
+    return
+  }
+
+  if (jsonImportFiles.value.some((file) => !isJsonFile(file.name))) {
+    ElMessage.error('JSON 入库当前仅支持 .json 文件')
+    return
+  }
+
+  // TODO: connect JSON knowledge base import API when backend contract is ready.
+  ElMessage.info('JSON 入库接口待后端接入')
 }
 
 const deleteKB = (id) => {
@@ -1423,67 +1725,259 @@ const deleteKB = (id) => {
     .catch(() => {})
 }
 
-const evalQuery = reactive({ status: '' })
-const evalList = ref([])
-const activeEvalId = ref(null)
-const createEvalVisible = ref(false)
-const newEvalForm = reactive({ name: '', knowledgeBaseId: '', metrics: [] })
-const evalDetail = ref({})
-
-const fetchEvals = () => {
-  evalList.value = [
-    {
-      evaluationId: 'eval_10001',
-      name: '项目知识库基础盘点',
-      knowledgeBaseId: 'kb_10001',
-      knowledgeBaseName: '项目知识库',
-      status: 'completed',
-      questionCount: 50,
-      averageScore: 86.5,
-      createdAt: '2026-06-21 13:00:00'
-    }
-  ]
-}
-
 const getEvalTagType = (status) => {
   const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
   return maps[status] || 'info'
 }
 
-const viewEvalDetail = (id) => {
-  activeEvalId.value = id
-  evalDetail.value = {
-    evaluationId: id,
-    name: '项目知识库评估',
-    summary: {
-      questionCount: 50,
-      averageScore: 86.5,
-      retrievalRecall: 0.82,
-      answerRelevance: 0.88,
-      faithfulness: 0.85,
-      responseQuality: 0.91
-    },
-    items: [
+const evaluationTab = ref('datasets')
+const evaluationTabs = [
+  { name: 'datasets', label: '评估集管理' },
+  { name: 'ingestion', label: '入库质量评估' },
+  { name: 'retrieval', label: '检索评估' },
+  { name: 'records', label: '评估记录' }
+]
+const datasetQuery = reactive({ keyword: '', type: '' })
+const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
+const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
+const recordQuery = reactive({ type: '', status: '', keyword: '' })
+const activeRetrievalDetail = ref(null)
+
+const evaluationDatasets = ref([
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    name: '京东规则检索评估集',
+    type: 'retrieval_eval',
+    sampleCount: 86,
+    createdAt: '2026-06-23 10:00'
+  },
+  {
+    datasetId: 'jd_rules_mixed_v1',
+    name: '京东规则综合评估集',
+    type: 'mixed',
+    sampleCount: 128,
+    createdAt: '2026-06-22 18:30'
+  }
+])
+
+const filteredEvaluationDatasets = computed(() => {
+  const keyword = datasetQuery.keyword.trim()
+  return evaluationDatasets.value.filter((item) => {
+    const matchedKeyword = !keyword || item.datasetId.includes(keyword) || item.name.includes(keyword)
+    const matchedType = !datasetQuery.type || item.type === datasetQuery.type
+    return matchedKeyword && matchedType
+  })
+})
+
+const ingestionMetrics = reactive({
+  totalChunks: '12,000',
+  lowQualityChunks: '340',
+  tooShortRate: '4.0%',
+  duplicateRate: '2.0%'
+})
+
+const problemChunks = ref([
+  {
+    chunkId: 'chunk_001',
+    ruleId: '923540006109319168',
+    title: '个人/个体合规管理规则',
+    length: 28,
+    issueType: '过短',
+    similarity: '-'
+  },
+  {
+    chunkId: 'chunk_088',
+    ruleId: '1076394019191394304',
+    title: '质保期服务规则',
+    length: 2500,
+    issueType: '过长',
+    similarity: '-'
+  },
+  {
+    chunkId: 'chunk_010',
+    ruleId: '880256294462820352',
+    title: '经营类目商品阈值明细表',
+    length: 820,
+    issueType: '重复',
+    similarity: '0.98'
+  }
+])
+
+const retrievalEvaluations = ref([
+  {
+    taskId: 'retrieval_eval_001',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    faqHitAt5: '81.25%',
+    kbRecallAt10: '86.67%',
+    kbMrrAt10: '0.742',
+    errorCount: 1
+  },
+  {
+    taskId: 'retrieval_eval_002',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v2',
+    status: 'running',
+    faqHitAt5: '',
+    kbRecallAt10: '',
+    kbMrrAt10: '',
+    errorCount: 0
+  }
+])
+
+const retrievalCaseResults = ref([
+  {
+    caseId: 'eval_0001',
+    question: '个人/个体店出售假冒商品怎么处理？',
+    rewrittenQuestion: '个人个体店 出售假冒商品 处罚',
+    expectedRuleId: '923540006109319168',
+    faqHit: 1,
+    kbRecall: 1,
+    kbRr: 1,
+    hits: [
+      { id: 'faq_001', title: 'FAQ #1 faq_001', score: '0.93', preview: '个人/个体店出售假冒商品怎么处理？' },
       {
-        question: '这个项目的核心功能是什么？',
-        answer: '项目主要用于企业知识库管理、检索问答和评估分析。',
-        score: 88,
-        retrievedDocumentCount: 4,
-        comment: '回答覆盖核心功能，暂未发现明显幻觉。'
+        id: 'kb_001',
+        title: 'KB #1 个人/个体合规管理规则',
+        score: '0.88',
+        preview: '出售假冒商品的，平台可采取全店商品下架、永久禁止发布新商品、违约金、店铺清退等处理措施...'
       }
     ]
+  },
+  {
+    caseId: 'eval_0018',
+    question: 'SSD 固态硬盘最低质保多久？',
+    rewrittenQuestion: 'SSD 固态硬盘 最低质保 周期',
+    expectedRuleId: '1076394019191394304',
+    faqHit: 0,
+    kbRecall: 1,
+    kbRr: 0.5,
+    hits: [
+      { id: 'kb_018', title: 'KB #1 质保期服务规则', score: '0.79', preview: '不同类目商品的质保周期以平台规则和商品详情页承诺为准...' }
+    ]
+  },
+  {
+    caseId: 'eval_0031',
+    question: '宠物健康类目需要什么资质？',
+    rewrittenQuestion: '宠物健康 类目 入驻 资质',
+    expectedRuleId: '880256294462820352',
+    faqHit: 0,
+    kbRecall: 0,
+    kbRr: 0,
+    hits: []
   }
+])
+
+const activeRetrievalCase = ref(retrievalCaseResults.value[0])
+
+const evaluationRecords = ref([
+  {
+    taskId: 'retrieval_eval_001',
+    type: 'retrieval',
+    typeName: '检索评估',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    metrics: 'FAQ Hit@5 81.25% / KB Recall@10 86.67% / MRR 0.742',
+    finishedAt: '2026-06-23 10:05'
+  },
+  {
+    taskId: 'ingest_eval_014',
+    type: 'ingestion',
+    typeName: '入库质量',
+    datasetId: '-',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    metrics: '低质量 340 / 过短率 4.0% / 过长率 3.0% / 重复率 2.0%',
+    finishedAt: '2026-06-23 09:40'
+  },
+  {
+    taskId: 'retrieval_eval_002',
+    type: 'retrieval',
+    typeName: '检索评估',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v2',
+    status: 'running',
+    metrics: '-',
+    finishedAt: '-'
+  }
+])
+
+const filteredEvaluationRecords = computed(() => {
+  const keyword = recordQuery.keyword.trim()
+  return evaluationRecords.value.filter((item) => {
+    const matchedType = !recordQuery.type || item.type === recordQuery.type
+    const matchedStatus = !recordQuery.status || item.status === recordQuery.status
+    const matchedKeyword =
+      !keyword || item.taskId.includes(keyword) || item.datasetId.includes(keyword) || item.kbVersion.includes(keyword)
+    return matchedType && matchedStatus && matchedKeyword
+  })
+})
+
+const fetchEvaluationDatasets = () => {
+  // TODO: replace mock data with backend API when evaluation dataset endpoints are ready.
+  ElMessage.success('评估集列表已刷新')
 }
 
-const submitCreateEval = () => {
-  ElMessage.success('评估任务创建成功')
-  createEvalVisible.value = false
-  fetchEvals()
+const createEvalDataset = () => {
+  // TODO: open dataset creation dialog after backend contract is finalized.
+  ElMessage.info('新建评估集接口待后端接入')
 }
 
-const deleteEval = (id) => {
-  ElMessage.success(`评估任务 ${id} 已删除`)
-  fetchEvals()
+const importEvalSamples = () => {
+  // TODO: connect sample import/upload API.
+  ElMessage.info('样本导入接口待后端接入')
+}
+
+const viewDatasetSamples = (row) => {
+  // TODO: connect dataset sample list API.
+  ElMessage.info(`查看 ${row.datasetId} 样本接口待后端接入`)
+}
+
+const deleteEvalDataset = (row) => {
+  // TODO: connect dataset delete API.
+  ElMessage.warning(`删除评估集 ${row.datasetId} 接口待后端接入`)
+}
+
+const runIngestionEvaluation = () => {
+  // TODO: connect ingestion quality evaluation API.
+  ElMessage.success('已生成入库质量评估演示结果')
+}
+
+const createRetrievalEvaluation = () => {
+  // TODO: connect retrieval evaluation task API.
+  ElMessage.success('已创建检索评估演示任务')
+}
+
+const openRetrievalDetail = (row) => {
+  activeRetrievalDetail.value = row
+  activeRetrievalCase.value = retrievalCaseResults.value[0]
+}
+
+const rerunRetrievalEvaluation = (row) => {
+  // TODO: connect retrieval evaluation rerun API.
+  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
+}
+
+const fetchEvaluationRecords = () => {
+  // TODO: replace mock records with backend API.
+  ElMessage.success('评估记录已刷新')
+}
+
+const viewEvaluationRecord = (row) => {
+  if (row.type === 'retrieval') {
+    evaluationTab.value = 'retrieval'
+    const task = retrievalEvaluations.value.find((item) => item.taskId === row.taskId) || retrievalEvaluations.value[0]
+    openRetrievalDetail(task)
+    return
+  }
+  evaluationTab.value = 'ingestion'
+}
+
+const rerunEvaluationRecord = (row) => {
+  // TODO: connect common evaluation rerun API.
+  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
 }
 
 onMounted(() => {
@@ -1495,7 +1989,8 @@ onMounted(() => {
   fetchKeywordRules()
   fetchTermNormalizations()
   fetchKBs()
-  fetchEvals()
+  fetchEvaluationDatasets()
+  fetchEvaluationRecords()
 })
 </script>
 
@@ -1813,6 +2308,138 @@ onMounted(() => {
 .score-text {
   font-weight: 600;
   color: #2362fb;
+}
+
+.evaluation-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.evaluation-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+}
+
+.evaluation-tab {
+  height: 42px;
+  padding: 0 22px;
+  background: #ffffff;
+  border: 1px solid #d9e2ef;
+  color: #536173;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.evaluation-tab:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.evaluation-tab:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.evaluation-tab + .evaluation-tab {
+  margin-left: -1px;
+}
+
+.evaluation-tab.active {
+  color: #ffffff;
+  background: #409eff;
+  border-color: #409eff;
+}
+
+.evaluation-tab:hover:not(.active) {
+  color: #2362fb;
+  background: #f5faff;
+}
+
+.evaluation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wide-select {
+  width: 260px;
+}
+
+.eval-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-card .m-val.primary {
+  color: #2362fb;
+}
+
+.metric-card .m-val.warning {
+  color: #f59e0b;
+}
+
+.metric-card .m-val.danger {
+  color: #ff4d4f;
+}
+
+.section-heading {
+  margin: 0 0 18px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2b3648;
+}
+
+.eval-detail-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.hit-list {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+}
+
+.hit-item {
+  padding: 14px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8edf5;
+}
+
+.hit-item:last-child {
+  border-bottom: none;
+}
+
+.hit-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.hit-head strong {
+  color: #243246;
+}
+
+.hit-head span {
+  font-weight: 700;
+  color: #2362fb;
+}
+
+.hit-item p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #7b8492;
+}
+
+.mini-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .eval-detail-container {

@@ -17,5 +17,21 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
     "vite": "^7.3.0"
-  }
+  },
+  "description": "EKB 智能助手前端项目，基于 Vue 3、Vite 和 Element Plus 构建。",
+  "main": "vite.config.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minedegithubhao/ekb_intelligent_assistant_web.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/minedegithubhao/ekb_intelligent_assistant_web/issues"
+  },
+  "homepage": "https://github.com/minedegithubhao/ekb_intelligent_assistant_web#readme"
 }

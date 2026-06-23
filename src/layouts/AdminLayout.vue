@@ -50,6 +50,7 @@
           <el-avatar :size="32">管</el-avatar>
           <span class="nickname">管理员</span>
           <el-tag size="small" type="primary" effect="plain">Admin</el-tag>
+          <el-button plain type="danger" :icon="SwitchButton" @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
 
@@ -63,6 +64,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound,
   ChatLineRound,
@@ -71,8 +73,11 @@ import {
   FolderOpened,
   Operation,
   Setting,
+  SwitchButton,
   User
 } from '@element-plus/icons-vue'
+import { logout } from '@/api/auth'
+import { clearAuthSession } from '@/utils/authSession'
 
 const emit = defineEmits(['menu-change'])
 const router = useRouter()
@@ -95,6 +100,28 @@ const handleMenuSelect = (index) => {
 
 const goUserChat = () => {
   router.push('/user-chat')
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定退出当前账号吗？', '退出登录', {
+      type: 'warning',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    await logout()
+  } catch {
+    // 本地退出优先，后端 token 已失效或网络异常时也清理登录态。
+  } finally {
+    clearAuthSession()
+    ElMessage.success('已退出登录')
+    router.replace('/login')
+  }
 }
 </script>
 

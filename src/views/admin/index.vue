@@ -260,11 +260,16 @@
             />
           </el-form-item>
           <el-form-item label="规则回复文本">
-            <el-input :model-value="rule.response_text || '-'" disabled />
+            <el-input
+              v-model="rule.editResponseText"
+              type="textarea"
+              :rows="3"
+              placeholder="请输入规则命中后的回复文本；可留空"
+            />
           </el-form-item>
         </el-form>
         <div class="panel-actions">
-          <el-button type="primary" @click="saveKeywordRule(rule)">保存关键词</el-button>
+          <el-button type="primary" @click="saveKeywordRule(rule)">保存规则配置</el-button>
         </div>
       </div>
     </section>
@@ -1259,7 +1264,8 @@ const fetchKeywordRules = async () => {
     const data = await getKeywordRules()
     keywordRules.value = data.map((item) => ({
       ...item,
-      editKeywords: [...(item.keywords || [])]
+      editKeywords: [...(item.keywords || [])],
+      editResponseText: item.response_text || ''
     }))
   } catch (error) {
     ElMessage.error(error.message || '关键词规则加载失败')
@@ -1270,11 +1276,17 @@ const fetchKeywordRules = async () => {
 
 const saveKeywordRule = async (rule) => {
   try {
-    const data = await updateKeywordRuleKeywords(rule.rule_code, rule.editKeywords)
-    Object.assign(rule, data, { editKeywords: [...(data.keywords || [])] })
-    ElMessage.success('关键词已保存')
+    const data = await updateKeywordRuleKeywords(rule.rule_code, {
+      keywords: rule.editKeywords,
+      response_text: rule.editResponseText
+    })
+    Object.assign(rule, data, {
+      editKeywords: [...(data.keywords || [])],
+      editResponseText: data.response_text || ''
+    })
+    ElMessage.success('规则配置已保存')
   } catch (error) {
-    ElMessage.error(error.message || '关键词保存失败')
+    ElMessage.error(error.message || '规则配置保存失败')
   }
 }
 

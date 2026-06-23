@@ -32,10 +32,10 @@ export function getKeywordRules() {
   return request('/admin/retrieval/keyword-rules')
 }
 
-export function updateKeywordRuleKeywords(ruleCode, keywords) {
+export function updateKeywordRuleKeywords(ruleCode, payload) {
   return request(`/admin/retrieval/keyword-rules/${ruleCode}/keywords`, {
     method: 'PUT',
-    body: JSON.stringify({ keywords })
+    body: JSON.stringify(payload)
   })
 }
 

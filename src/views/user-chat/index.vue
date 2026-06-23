@@ -59,6 +59,9 @@
             <el-option label="企业知识库" value="enterprise" />
             <el-option label="个人知识库" value="personal" />
           </el-select>
+          <el-button plain type="danger" size="small" :icon="SwitchButton" @click="handleLogout">
+            退出登录
+          </el-button>
         </div>
       </header>
 
@@ -114,8 +117,8 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Promotion, Search, Service, User } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Promotion, Search, Service, SwitchButton, User } from '@element-plus/icons-vue'
 import {
   createConversation as createConversationApi,
   deleteConversation,
@@ -123,6 +126,8 @@ import {
   getConversations,
   sendConversationMessage
 } from '@/api/conversation'
+import { logout } from '@/api/auth'
+import { clearAuthSession } from '@/utils/authSession'
 
 const knowledgeBaseNames = {
   enterprise: '企业知识库',
@@ -146,6 +151,28 @@ const activeKnowledgeBaseName = computed(() => knowledgeBaseNames[knowledgeBaseT
 
 const goAdmin = () => {
   router.push('/admin')
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定退出当前账号吗？', '退出登录', {
+      type: 'warning',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    await logout()
+  } catch {
+    // 本地退出优先，后端 token 已失效或网络异常时也清理登录态。
+  } finally {
+    clearAuthSession()
+    ElMessage.success('已退出登录')
+    router.replace('/login')
+  }
 }
 
 const handleKnowledgeBaseChange = async (value) => {

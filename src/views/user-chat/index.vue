@@ -6,7 +6,14 @@
           <h1>知识助手</h1>
           <span>用户问答工作台</span>
         </div>
-        <el-button type="primary" :icon="Plus" circle @click="createConversation" />
+        <el-button type="primary" :icon="Plus" circle :loading="conversationCreating" @click="createConversation" />
+      </div>
+
+      <div class="panel-actions">
+        <el-tag type="success" effect="plain">历史已接入</el-tag>
+        <el-button v-if="activeConversationId" type="danger" plain size="small" @click="removeActiveConversation">
+          删除会话
+        </el-button>
       </div>
 
       <el-input
@@ -17,17 +24,18 @@
         class="conversation-search"
       />
 
-      <div class="conversation-list">
+      <div class="conversation-list" v-loading="conversationLoading">
         <button
           v-for="item in filteredConversations"
           :key="item.id"
           class="conversation-item"
           :class="{ active: item.id === activeConversationId }"
-          @click="activeConversationId = item.id"
+          @click="selectConversation(item.id)"
         >
           <span class="conversation-title">{{ item.title }}</span>
           <span class="conversation-meta">{{ item.updatedAt }}</span>
         </button>
+        <el-empty v-if="!conversationLoading && filteredConversations.length === 0" description="暂无历史会话" />
       </div>
     </aside>
 
@@ -38,6 +46,9 @@
           <span>当前知识库：{{ activeKnowledgeBaseName }}</span>
         </div>
         <div class="header-actions">
+          <el-button v-if="isAdmin" type="primary" plain size="small" @click="goAdmin">
+            返回管理端
+          </el-button>
           <el-select
             v-if="isAdmin"
             v-model="knowledgeBaseType"
@@ -48,11 +59,10 @@
             <el-option label="企业知识库" value="enterprise" />
             <el-option label="个人知识库" value="personal" />
           </el-select>
-          <el-tag type="info" effect="plain">Mock</el-tag>
         </div>
       </header>
 
-      <section ref="messageListRef" class="message-list">
+      <section ref="messageListRef" class="message-list" v-loading="messageLoading">
         <div
           v-for="message in activeMessages"
           :key="message.id"
@@ -68,6 +78,14 @@
             <p>{{ message.content }}</p>
           </div>
         </div>
+        <el-empty
+          v-if="!messageLoading && activeConversationId && activeMessages.length === 0"
+          description="当前会话暂无消息"
+        />
+        <el-empty
+          v-if="!messageLoading && !activeConversationId"
+          description="请选择或新建一个会话"
+        />
       </section>
 
       <footer class="composer">
@@ -79,7 +97,13 @@
           placeholder="输入你的问题，例如：企业店保证金怎么收取？"
           @keydown.enter.exact.prevent="sendQuestion"
         />
-        <el-button type="primary" :icon="Promotion" :disabled="!question.trim()" @click="sendQuestion">
+        <el-button
+          type="primary"
+          :icon="Promotion"
+          :loading="questionSending"
+          :disabled="!question.trim()"
+          @click="sendQuestion"
+        >
           发送
         </el-button>
       </footer>
@@ -88,9 +112,17 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Promotion, Search, Service, User } from '@element-plus/icons-vue'
+import {
+  createConversation as createConversationApi,
+  deleteConversation,
+  getConversationMessages,
+  getConversations,
+  sendConversationMessage
+} from '@/api/conversation'
 
 const knowledgeBaseNames = {
   enterprise: '企业知识库',
@@ -99,58 +131,57 @@ const knowledgeBaseNames = {
 
 const storedRoles = JSON.parse(localStorage.getItem('roles') || '[]')
 const isAdmin = storedRoles.includes('admin')
+const router = useRouter()
 const knowledgeBaseType = ref(localStorage.getItem('knowledge_base_type') || 'enterprise')
 const searchKeyword = ref('')
 const question = ref('')
-const activeConversationId = ref(1)
+const activeConversationId = ref(null)
 const messageListRef = ref(null)
+const conversationLoading = ref(false)
+const conversationCreating = ref(false)
+const messageLoading = ref(false)
+const questionSending = ref(false)
 
 const activeKnowledgeBaseName = computed(() => knowledgeBaseNames[knowledgeBaseType.value] || '未配置')
 
-const handleKnowledgeBaseChange = (value) => {
+const goAdmin = () => {
+  router.push('/admin')
+}
+
+const handleKnowledgeBaseChange = async (value) => {
   localStorage.setItem('knowledge_base_type', value)
   localStorage.setItem('knowledge_base_name', knowledgeBaseNames[value] || '')
   ElMessage.success(`已切换到${knowledgeBaseNames[value]}`)
+  activeConversationId.value = null
+  messages.value = {}
+  await fetchConversations()
 }
 
-const conversations = ref([
-  { id: 1, title: '企业店保证金咨询', updatedAt: '刚刚' },
-  { id: 2, title: '个人/个体店入驻规则', updatedAt: '昨天' },
-  { id: 3, title: '店铺违规处理说明', updatedAt: '06-20' }
-])
+const conversations = ref([])
+const messages = ref({})
 
-const messages = ref({
-  1: [
-    {
-      id: 'm1',
-      role: 'assistant',
-      content: '你好，我可以协助查询企业店、个人/个体店相关规则。'
-    },
-    {
-      id: 'm2',
-      role: 'user',
-      content: '企业店保证金怎么收取？'
-    },
-    {
-      id: 'm3',
-      role: 'assistant',
-      content: '企业店保证金通常按经营类目、店铺类型和平台规则要求收取。当前页面为占位版本，后续会接入后端 RAGService 返回真实答案和来源。'
-    }
-  ],
-  2: [
-    {
-      id: 'm4',
-      role: 'assistant',
-      content: '可以询问个人/个体店入驻、资质、交易、退店等规则。'
-    }
-  ],
-  3: [
-    {
-      id: 'm5',
-      role: 'assistant',
-      content: '可以查询违规场景、扣分、限制经营、申诉等规则。'
-    }
-  ]
+const formatDateTime = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString()
+}
+
+const normalizeConversation = (item) => ({
+  id: item.conversation_id,
+  title: item.title || '新会话',
+  knowledgeBaseType: item.knowledge_base_type,
+  updatedAt: formatDateTime(item.last_message_at || item.updated_at || item.created_at)
+})
+
+const normalizeMessage = (item) => ({
+  id: item.message_id,
+  conversationId: item.conversation_id,
+  role: item.role,
+  content: item.content,
+  sources: item.sources || [],
+  metadata: item.metadata || {},
+  createdAt: item.created_at
 })
 
 const filteredConversations = computed(() => {
@@ -172,51 +203,109 @@ const scrollToBottom = async () => {
   }
 }
 
-const createConversation = () => {
-  const id = Date.now()
-  conversations.value.unshift({
-    id,
-    title: `新的${activeKnowledgeBaseName.value}咨询`,
-    updatedAt: '刚刚'
-  })
-  messages.value[id] = [
-    {
-      id: `${id}-welcome`,
-      role: 'assistant',
-      content: `新的会话已创建，当前知识库为${activeKnowledgeBaseName.value}。你可以先输入问题，后续这里会接入后端历史会话接口。`
+const fetchConversations = async () => {
+  conversationLoading.value = true
+  try {
+    const data = await getConversations({ knowledge_base_type: knowledgeBaseType.value })
+    conversations.value = data.map(normalizeConversation)
+    if (!activeConversationId.value && conversations.value.length > 0) {
+      activeConversationId.value = conversations.value[0].id
+      await fetchMessages(activeConversationId.value)
     }
-  ]
-  activeConversationId.value = id
-  scrollToBottom()
+  } catch (error) {
+    ElMessage.error(error.message || '历史会话加载失败')
+  } finally {
+    conversationLoading.value = false
+  }
 }
 
-const sendQuestion = () => {
+const fetchMessages = async (conversationId) => {
+  if (!conversationId) return
+  messageLoading.value = true
+  try {
+    const data = await getConversationMessages(conversationId, {
+      knowledge_base_type: knowledgeBaseType.value
+    })
+    messages.value[conversationId] = data.map(normalizeMessage)
+    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(error.message || '历史消息加载失败')
+  } finally {
+    messageLoading.value = false
+  }
+}
+
+const selectConversation = async (conversationId) => {
+  activeConversationId.value = conversationId
+  if (!messages.value[conversationId]) {
+    await fetchMessages(conversationId)
+  } else {
+    scrollToBottom()
+  }
+}
+
+const createConversation = async () => {
+  conversationCreating.value = true
+  try {
+    const data = await createConversationApi({
+      knowledge_base_type: knowledgeBaseType.value,
+      title: `新的${activeKnowledgeBaseName.value}咨询`
+    })
+    const conversation = normalizeConversation(data)
+    conversations.value.unshift(conversation)
+    messages.value[conversation.id] = []
+    activeConversationId.value = conversation.id
+    ElMessage.success('会话已创建')
+    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(error.message || '会话创建失败')
+  } finally {
+    conversationCreating.value = false
+  }
+}
+
+const ensureActiveConversation = async () => {
+  if (activeConversationId.value) return activeConversationId.value
+  await createConversation()
+  return activeConversationId.value
+}
+
+const sendQuestion = async () => {
   const content = question.value.trim()
   if (!content) return
-
-  const conversationMessages = messages.value[activeConversationId.value] || []
-  conversationMessages.push({
-    id: `${Date.now()}-user`,
-    role: 'user',
-    content
-  })
-  conversationMessages.push({
-    id: `${Date.now()}-assistant`,
-    role: 'assistant',
-    content: `已收到问题：“${content}”。当前是${activeKnowledgeBaseName.value}的前端占位回复，后续会调用后端聊天接口并展示流式答案。`
-  })
-  messages.value[activeConversationId.value] = conversationMessages
-
-  const active = conversations.value.find((item) => item.id === activeConversationId.value)
-  if (active) {
-    active.title = content.length > 18 ? `${content.slice(0, 18)}...` : content
-    active.updatedAt = '刚刚'
+  questionSending.value = true
+  try {
+    const conversationId = await ensureActiveConversation()
+    if (!conversationId) return
+    await sendConversationMessage(conversationId, {
+      question: content,
+      knowledge_base_type: knowledgeBaseType.value
+    })
+    question.value = ''
+    await fetchMessages(conversationId)
+    await fetchConversations()
+    activeConversationId.value = conversationId
+  } catch (error) {
+    ElMessage.error(error.message || '问题发送失败')
+  } finally {
+    questionSending.value = false
   }
-
-  question.value = ''
-  ElMessage.success('问题已发送')
-  scrollToBottom()
 }
+
+const removeActiveConversation = async () => {
+  if (!activeConversationId.value) return
+  try {
+    await deleteConversation(activeConversationId.value)
+    delete messages.value[activeConversationId.value]
+    activeConversationId.value = null
+    await fetchConversations()
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    ElMessage.error(error.message || '会话删除失败')
+  }
+}
+
+onMounted(fetchConversations)
 </script>
 
 <style scoped>
@@ -242,6 +331,17 @@ const sendQuestion = () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-actions .el-button {
+  flex: 0 0 auto;
 }
 
 .panel-header h1,

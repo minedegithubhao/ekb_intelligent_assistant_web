@@ -1,218 +1,83 @@
 <template>
   <AdminLayout @menu-change="currentTab = $event">
-
-    <section v-if="currentTab === 'dashboard'" class="commerce-dashboard" :class="{ 'dark-theme': darkTheme }">
-      <div class="dashboard-shell">
-        <aside class="dashboard-sidebar">
-          <div class="brand-block">
-            <div class="brand-logo">K</div>
-            <div>
-              <strong>KnowForge</strong>
-              <span>电商知识问答中台</span>
-            </div>
+    <section v-if="currentTab === 'dashboard'" class="dashboard-panel">
+      <div class="pane-card">
+        <div class="dashboard-header">
+          <div>
+            <h2>仪表台参数</h2>
+            <p>当前生效配置来源：{{ dashboardConfig.source || '-' }}</p>
           </div>
-          <el-menu default-active="overview" class="dashboard-menu">
-            <el-sub-menu index="business">
-              <template #title>
-                <el-icon><DataAnalysis /></el-icon>
-                <span>经营洞察</span>
-              </template>
-              <el-menu-item index="overview">问答总览</el-menu-item>
-              <el-menu-item index="store">店铺热力</el-menu-item>
-              <el-menu-item index="channel">渠道分布</el-menu-item>
-            </el-sub-menu>
-            <el-sub-menu index="qa">
-              <template #title>
-                <el-icon><ChatDotRound /></el-icon>
-                <span>问答运营</span>
-              </template>
-              <el-menu-item index="records">问答记录</el-menu-item>
-              <el-menu-item index="review">人工复核</el-menu-item>
-              <el-menu-item index="alerts">异常告警</el-menu-item>
-            </el-sub-menu>
-            <el-sub-menu index="settings">
-              <template #title>
-                <el-icon><Setting /></el-icon>
-                <span>系统配置</span>
-              </template>
-              <el-menu-item index="layout">卡片布局</el-menu-item>
-              <el-menu-item index="rules">回复策略</el-menu-item>
-            </el-sub-menu>
-          </el-menu>
-        </aside>
-
-        <main class="dashboard-main">
-          <header class="dashboard-header">
-            <div class="header-left">
-              <div class="header-logo">电商企业知识问答助手</div>
-              <el-input v-model="globalKeyword" class="global-search" placeholder="搜索店铺、订单、知识条目或问题" clearable>
-                <template #prefix>
-                  <el-icon><Search /></el-icon>
-                </template>
-              </el-input>
-            </div>
-            <div class="header-actions">
-              <el-badge :value="alertList.length" class="notice-badge">
-                <el-button :icon="Bell" circle @click="detailDialogVisible = true" />
-              </el-badge>
-              <el-switch v-model="darkTheme" inline-prompt active-text="暗" inactive-text="亮" class="theme-switch" />
-            </div>
-          </header>
-
-          <div class="dashboard-breadcrumb-row">
-            <el-breadcrumb separator="/">
-              <el-breadcrumb-item>后台管理</el-breadcrumb-item>
-              <el-breadcrumb-item>经营洞察</el-breadcrumb-item>
-              <el-breadcrumb-item>问答仪表盘</el-breadcrumb-item>
-            </el-breadcrumb>
-            <div class="dashboard-toolbar-actions">
-              <el-button :icon="Setting" @click="layoutDrawerVisible = true">配置布局</el-button>
-              <el-button type="primary" :icon="Download" @click="exportRecords">导出数据</el-button>
-            </div>
+          <div class="dashboard-actions">
+            <el-tag v-if="dashboardConfig.version" type="success" effect="plain">
+              v{{ dashboardConfig.version.version_no }} · {{ dashboardConfig.version.status }}
+            </el-tag>
+            <el-button @click="fetchDashboardConfig">刷新</el-button>
+            <el-button type="primary" @click="openConfigModal">修改参数</el-button>
           </div>
+        </div>
 
-          <div class="filter-bar dashboard-filter">
-            <el-date-picker v-model="dashboardFilters.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
-            <el-select v-model="dashboardFilters.store" placeholder="店铺" clearable>
-              <el-option v-for="store in storeOptions" :key="store" :label="store" :value="store" />
-            </el-select>
-            <el-select v-model="dashboardFilters.type" placeholder="问题类型" clearable>
-              <el-option v-for="type in questionTypeOptions" :key="type" :label="type" :value="type" />
-            </el-select>
-            <el-select v-model="dashboardFilters.satisfaction" placeholder="满意度" clearable>
-              <el-option label="高满意" value="高满意" />
-              <el-option label="中性" value="中性" />
-              <el-option label="低满意" value="低满意" />
-            </el-select>
-            <el-button type="primary">查询</el-button>
-            <el-button @click="resetDashboardFilters">重置</el-button>
+        <div class="param-grid" v-loading="dashboardLoading">
+          <div class="param-card">
+            <span>模型</span>
+            <strong>{{ dashboardConfig.model || '-' }}</strong>
           </div>
-
-          <div class="kpi-grid">
-            <article v-for="item in kpiCards" :key="item.title" class="kpi-card">
-              <div class="kpi-card-head">
-                <span>{{ item.title }}</span>
-                <el-tag :type="item.status" effect="plain" size="small">{{ item.badge }}</el-tag>
-              </div>
-              <strong>{{ item.value }}</strong>
-              <div class="compare-row">
-                <span :class="item.yoy >= 0 ? 'up' : 'down'">同比 {{ formatPercent(item.yoy) }}</span>
-                <span :class="item.mom >= 0 ? 'up' : 'down'">环比 {{ formatPercent(item.mom) }}</span>
-              </div>
-            </article>
+          <div class="param-card">
+            <span>Embedding</span>
+            <strong>{{ dashboardConfig.embedding_model || '-' }}</strong>
           </div>
-
-          <section class="dashboard-layout-grid">
-            <section v-for="card in enabledLayoutCards" :key="card.key" class="dashboard-card" :class="card.className">
-              <div class="card-title-row">
-                <h3>{{ card.title }}</h3>
-                <span>{{ card.extra }}</span>
-              </div>
-
-              <template v-if="card.key === 'trend'">
-                <div class="trend-chart">
-                  <svg viewBox="0 0 500 170" preserveAspectRatio="none">
-                    <polyline :points="trendPolyline" fill="none" stroke="#2f6fed" stroke-width="4" stroke-linecap="round" />
-                    <rect v-for="(item, index) in trendData" :key="item.label" :x="42 + index * 62" :y="155 - (16 - item.latency) * 8" width="22" :height="(16 - item.latency) * 8" rx="4" fill="#12b981" opacity="0.78" />
-                  </svg>
-                  <div class="chart-axis"><span v-for="item in trendData" :key="item.label">{{ item.label }}</span></div>
-                </div>
-                <div class="legend-row"><span class="legend blue">咨询量</span><span class="legend green">回复时效</span></div>
-              </template>
-
-              <template v-else-if="card.key === 'pie'">
-                <div class="pie-grid">
-                  <div class="pie-block">
-                    <div class="donut" :style="pieStyle(categoryShare)"><span>分类</span></div>
-                    <div class="pie-legend"><p v-for="item in categoryShare" :key="item.name"><i :style="{ background: item.color }"></i>{{ item.name }} {{ item.value }}%</p></div>
-                  </div>
-                  <div class="pie-block">
-                    <div class="donut" :style="pieStyle(channelShare)"><span>渠道</span></div>
-                    <div class="pie-legend"><p v-for="item in channelShare" :key="item.name"><i :style="{ background: item.color }"></i>{{ item.name }} {{ item.value }}%</p></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'ranking'">
-                <div class="rank-list">
-                  <div v-for="(item, index) in topQuestions" :key="item.question" class="rank-item">
-                    <b>{{ index + 1 }}</b>
-                    <div><strong>{{ item.question }}</strong><span>咨询 {{ item.count }} 次 · 解决率 {{ item.resolveRate }}</span></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'heat'">
-                <div class="heat-list">
-                  <div v-for="item in heatStores" :key="item.name" class="heat-row">
-                    <div class="heat-meta"><span>{{ item.name }}</span><em>{{ item.hot }}%</em></div>
-                    <div class="heat-bar" :style="heatStyle(item.hot)"><span>待响应 {{ item.wait }}</span></div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'visitor'">
-                <div class="visitor-grid">
-                  <div v-for="item in visitorBoard" :key="item.channel" class="visitor-item">
-                    <span>{{ item.channel }}</span><strong>{{ item.consulting }}</strong><small>访客 {{ item.visitors }} · {{ item.trend }}</small>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'alert'">
-                <div class="mini-alert-list">
-                  <div v-for="item in alertList" :key="item.title" class="mini-alert" :class="item.level"><strong>{{ item.title }}</strong><span>{{ item.desc }}</span></div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'review'">
-                <div class="review-list">
-                  <div v-for="item in reviewTasks" :key="item.id" class="review-item">
-                    <div><strong>{{ item.title }}</strong><span>{{ item.id }} · {{ item.owner }}</span></div><em>{{ item.priority }}</em>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else-if="card.key === 'records'">
-                <div class="record-actions"><el-button @click="batchMarkRecords">批量标记</el-button><el-button type="primary" @click="exportRecords">导出</el-button></div>
-                <el-table :data="qaRecords" border stripe @selection-change="handleRecordSelection">
-                  <el-table-column type="selection" width="48" />
-                  <el-table-column prop="id" label="记录ID" width="150" sortable />
-                  <el-table-column prop="time" label="时间" width="160" sortable />
-                  <el-table-column prop="store" label="店铺" width="120" />
-                  <el-table-column prop="type" label="问题类型" width="110" />
-                  <el-table-column prop="question" label="用户问题" show-overflow-tooltip />
-                  <el-table-column prop="answerTime" label="响应秒数" width="110" sortable />
-                  <el-table-column prop="satisfaction" label="满意度" width="100" />
-                  <el-table-column prop="status" label="状态" width="100" />
-                </el-table>
-                <div class="pagination-row"><el-pagination background layout="prev, pager, next, sizes, total" :total="128" :page-sizes="[10, 20, 50]" /></div>
-              </template>
-            </section>
-          </section>
-        </main>
+          <div class="param-card">
+            <span>重排模型</span>
+            <strong>{{ dashboardConfig.rerank_model || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>变体生成</span>
+            <strong>{{ dashboardConfig.variant_generation_enabled ? '开' : '关' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>重排</span>
+            <strong>{{ dashboardConfig.rerank_enabled ? '开' : '关' }}</strong>
+          </div>
+        </div>
       </div>
 
-      <el-dialog v-model="detailDialogVisible" title="全局详情与异常提醒" width="640px">
-        <div class="alert-stack">
-          <div v-for="alert in alertList" :key="alert.title" class="alert-item" :class="alert.level">
-            <div><strong>{{ alert.title }}</strong><p>{{ alert.desc }}</p></div>
-            <el-tag :type="alert.tag">{{ alert.time }}</el-tag>
-          </div>
+      <div class="dashboard-two-column">
+        <div class="pane-card">
+          <h3>TopK</h3>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="FAQ">{{ dashboardConfig.top_k?.faq ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Doc">{{ dashboardConfig.top_k?.doc ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Rerank">{{ dashboardConfig.top_k?.rerank ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="Final Evidence">
+              {{ dashboardConfig.top_k?.final_evidence ?? '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
         </div>
-      </el-dialog>
 
-      <el-drawer v-model="layoutDrawerVisible" title="仪表盘卡片自定义布局" size="360px">
-        <div class="layout-config-list">
-          <div v-for="(card, index) in layoutCards" :key="card.key" class="layout-config-item">
-            <el-checkbox v-model="card.enabled">{{ card.title }}</el-checkbox>
-            <div>
-              <el-button :icon="ArrowUp" circle size="small" :disabled="index === 0" @click="moveLayoutCard(index, -1)" />
-              <el-button :icon="ArrowDown" circle size="small" :disabled="index === layoutCards.length - 1" @click="moveLayoutCard(index, 1)" />
-            </div>
-          </div>
+        <div class="pane-card">
+          <h3>阈值</h3>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="FAQ 高置信">
+              {{ dashboardConfig.thresholds?.faq_high_conf ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="FAQ 中置信">
+              {{ dashboardConfig.thresholds?.faq_middle_conf ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="文档证据">
+              {{ dashboardConfig.thresholds?.doc_evidence ?? '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
         </div>
-      </el-drawer>
+      </div>
+
+      <div class="pane-card">
+        <h3>权重</h3>
+        <el-descriptions :column="4" border>
+          <el-descriptions-item label="FAQ Dense">{{ dashboardConfig.weights?.faq_dense ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="FAQ Sparse">{{ dashboardConfig.weights?.faq_sparse ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Doc Dense">{{ dashboardConfig.weights?.doc_dense ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Doc Sparse">{{ dashboardConfig.weights?.doc_sparse ?? '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
     </section>
 
     <section v-if="currentTab === 'users'" class="pane-card">
@@ -235,6 +100,7 @@
         <el-table-column prop="userId" label="用户ID" width="110" />
         <el-table-column prop="username" label="账号" />
         <el-table-column prop="displayName" label="显示名称" />
+        <el-table-column prop="department" label="部门" />
         <el-table-column prop="role" label="角色">
           <template #default="scope">
             <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'info'" size="small">
@@ -242,6 +108,7 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="knowledgeBaseName" label="知识库类型" width="130" />
         <el-table-column prop="status" label="状态">
           <template #default="scope">
             <span class="status-dot" :class="scope.row.status"></span>
@@ -252,10 +119,105 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
             <el-button link type="primary" @click="openUserModal('edit', scope.row)">修改</el-button>
-            <el-button link type="danger" @click="deleteUser(scope.row.userId)">删除</el-button>
+            <el-button
+              v-if="scope.row.status === 'enabled' && scope.row.userId !== currentUserId"
+              link
+              type="danger"
+              @click="disableUser(scope.row.userId)"
+            >
+              禁用
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
+    </section>
+
+    <section v-if="currentTab === 'history'" class="history-panel">
+      <div class="pane-card history-toolbar">
+        <div class="history-title">
+          <h2>历史会话管理</h2>
+          <p>按用户隔离查看用户端会话，管理每次会话的消息列表和消息数量。</p>
+        </div>
+        <div class="filter-wrapper history-filter">
+          <el-select
+            v-model="historyQuery.userId"
+            placeholder="选择用户"
+            class="filter-item"
+            clearable
+            filterable
+            @change="fetchConversationHistory"
+          >
+            <el-option
+              v-for="user in historyUserOptions"
+              :key="user.userId"
+              :label="`${user.displayName}（${user.username}）`"
+              :value="user.userId"
+            />
+          </el-select>
+          <el-select
+            v-model="historyQuery.knowledge_base_type"
+            placeholder="知识库类型"
+            class="filter-item"
+            clearable
+            @change="fetchConversationHistory"
+          >
+            <el-option label="企业知识库" value="enterprise" />
+            <el-option label="个人知识库" value="personal" />
+          </el-select>
+          <el-input
+            v-model="historyQuery.keyword"
+            placeholder="搜索会话标题或消息内容"
+            class="filter-item history-search-input"
+            clearable
+            @keyup.enter="fetchConversationHistory"
+          />
+          <el-button type="primary" @click="fetchConversationHistory">查询</el-button>
+          <el-button @click="resetHistoryQuery">重置</el-button>
+        </div>
+      </div>
+
+      <div class="history-summary-grid">
+        <div class="history-summary-card">
+          <span>当前会话数</span>
+          <strong>{{ historySummary.sessionCount }}</strong>
+        </div>
+        <div class="history-summary-card">
+          <span>消息总数</span>
+          <strong>{{ historySummary.messageCount }}</strong>
+        </div>
+        <div class="history-summary-card">
+          <span>涉及用户</span>
+          <strong>{{ historySummary.userCount }}</strong>
+        </div>
+        <div class="history-summary-card">
+          <span>数据来源</span>
+          <strong>{{ historyDataMode === 'api' ? '后端接口' : '演示数据' }}</strong>
+        </div>
+      </div>
+
+      <div class="pane-card">
+        <el-table :data="conversationHistory" v-loading="historyLoading" style="width: 100%">
+          <el-table-column prop="conversationId" label="会话ID" width="150" />
+          <el-table-column label="用户" min-width="180">
+            <template #default="scope">
+              <div class="history-user-cell">
+                <strong>{{ scope.row.displayName }}</strong>
+                <span>{{ scope.row.username }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="会话标题" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="knowledgeBaseName" label="知识库类型" width="130" />
+          <el-table-column prop="messageCount" label="消息数量" width="110" align="center" />
+          <el-table-column prop="lastMessageAt" label="最后消息时间" width="180" />
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click="openHistoryMessages(scope.row)">消息列表</el-button>
+              <el-button link type="danger" @click="deleteHistoryConversation(scope.row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </section>
 
     <section v-if="currentTab === 'knowledge'" class="pane-card">
@@ -381,6 +343,44 @@
       </div>
     </section>
 
+    <el-drawer v-model="historyDrawerVisible" size="560px" :title="activeHistorySession?.title || '会话消息列表'">
+      <div v-if="activeHistorySession" class="history-drawer-meta">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="用户">
+            {{ activeHistorySession.displayName }}（{{ activeHistorySession.username }}）
+          </el-descriptions-item>
+          <el-descriptions-item label="知识库类型">
+            {{ activeHistorySession.knowledgeBaseName }}
+          </el-descriptions-item>
+          <el-descriptions-item label="消息数量">
+            {{ activeHistorySession.messageCount }}
+          </el-descriptions-item>
+          <el-descriptions-item label="最后消息时间">
+            {{ activeHistorySession.lastMessageAt }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <div class="history-message-list" v-loading="historyMessageLoading">
+        <div
+          v-for="message in activeHistoryMessages"
+          :key="message.messageId"
+          class="history-message-item"
+          :class="message.role"
+        >
+          <div class="history-message-head">
+            <el-tag size="small" :type="message.role === 'assistant' ? 'primary' : 'success'" effect="plain">
+              {{ message.role === 'assistant' ? '助手' : '用户' }}
+            </el-tag>
+            <span>{{ message.createdAt }}</span>
+          </div>
+          <p>{{ message.content }}</p>
+        </div>
+
+        <el-empty v-if="!historyMessageLoading && activeHistoryMessages.length === 0" description="暂无消息记录" />
+      </div>
+    </el-drawer>
+
     <el-dialog v-model="userModalVisible" :title="userModalType === 'add' ? '新增用户' : '修改用户信息'" width="480px">
       <el-form :model="userForm" label-position="top">
         <el-form-item v-if="userModalType === 'add'" label="用户账号">
@@ -392,10 +392,22 @@
         <el-form-item label="显示名称">
           <el-input v-model="userForm.displayName" placeholder="请输入对外展示的名称" />
         </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="userForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-input v-model="userForm.department" placeholder="请输入部门" />
+        </el-form-item>
         <el-form-item label="角色设定">
           <el-radio-group v-model="userForm.role">
             <el-radio value="user">普通用户(user)</el-radio>
             <el-radio value="admin">管理员(admin)</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="userForm.role === 'user'" label="知识库类型">
+          <el-radio-group v-model="userForm.category">
+            <el-radio value="merchant">企业知识库</el-radio>
+            <el-radio value="individual">个人知识库</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="账号状态">
@@ -414,6 +426,83 @@
       <template #footer>
         <el-button @click="userModalVisible = false">取消</el-button>
         <el-button type="primary" @click="submitUserForm">确定保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="configModalVisible" title="修改仪表台参数" width="720px">
+      <el-form :model="configForm" label-position="top">
+        <div class="two-column">
+          <el-form-item label="模型">
+            <el-input v-model="configForm.model" />
+          </el-form-item>
+          <el-form-item label="Embedding 模型">
+            <el-input v-model="configForm.embedding_model" />
+          </el-form-item>
+        </div>
+        <el-form-item label="重排模型">
+          <el-input v-model="configForm.rerank_model" />
+        </el-form-item>
+        <div class="two-column">
+          <el-form-item label="变体生成">
+            <el-switch v-model="configForm.variant_generation_enabled" active-text="开" inactive-text="关" />
+          </el-form-item>
+          <el-form-item label="重排">
+            <el-switch v-model="configForm.rerank_enabled" active-text="开" inactive-text="关" />
+          </el-form-item>
+        </div>
+
+        <h4>TopK</h4>
+        <div class="four-column">
+          <el-form-item label="FAQ">
+            <el-input-number v-model="configForm.faq_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Doc">
+            <el-input-number v-model="configForm.doc_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Rerank">
+            <el-input-number v-model="configForm.rerank_top_k" :min="1" />
+          </el-form-item>
+          <el-form-item label="Final Evidence">
+            <el-input-number v-model="configForm.final_evidence_top_k" :min="1" />
+          </el-form-item>
+        </div>
+
+        <h4>阈值</h4>
+        <div class="three-column">
+          <el-form-item label="FAQ 高置信">
+            <el-input-number v-model="configForm.faq_high_conf_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="FAQ 中置信">
+            <el-input-number v-model="configForm.faq_middle_conf_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="文档证据">
+            <el-input-number v-model="configForm.doc_evidence_threshold" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+        </div>
+
+        <h4>权重</h4>
+        <div class="four-column">
+          <el-form-item label="FAQ Dense">
+            <el-input-number v-model="configForm.faq_dense_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="FAQ Sparse">
+            <el-input-number v-model="configForm.faq_sparse_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="Doc Dense">
+            <el-input-number v-model="configForm.doc_dense_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+          <el-form-item label="Doc Sparse">
+            <el-input-number v-model="configForm.doc_sparse_weight" :min="0" :max="1" :step="0.01" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="版本说明">
+          <el-input v-model="configDescription" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="configSaving" @click="submitConfigForm">保存并启用</el-button>
       </template>
     </el-dialog>
 
@@ -484,136 +573,90 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, ArrowLeft, ArrowUp, Bell, ChatDotRound, DataAnalysis, Download, Search, Setting, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, UploadFilled } from '@element-plus/icons-vue'
+import {
+  deleteAdminConversation,
+  getAdminConversationMessages,
+  getAdminConversationUsers,
+  getAdminConversations
+} from '@/api/adminConversations'
+import { createConfigVersion, getDashboardConfig } from '@/api/adminConfig'
+import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
-const currentTab = ref('users')
+const currentTab = ref('dashboard')
 const loading = ref(false)
+const currentUserId = JSON.parse(localStorage.getItem('userInfo') || '{}').id
+const dashboardLoading = ref(false)
+const dashboardConfig = ref({})
+const configModalVisible = ref(false)
+const configSaving = ref(false)
+const configDescription = ref('')
+const configForm = reactive({
+  model: '',
+  embedding_model: '',
+  rerank_model: '',
+  variant_generation_enabled: true,
+  rerank_enabled: true,
+  faq_k: 20,
+  doc_k: 20,
+  rerank_top_k: 8,
+  final_evidence_top_k: 6,
+  faq_high_conf_threshold: 0.85,
+  faq_middle_conf_threshold: 0.65,
+  doc_evidence_threshold: 0.55,
+  faq_dense_weight: 0.5,
+  faq_sparse_weight: 0.5,
+  doc_dense_weight: 0.7,
+  doc_sparse_weight: 0.3
+})
 
+const editableConfigKeys = Object.keys(configForm)
 
-const globalKeyword = ref('')
-const darkTheme = ref(false)
-const detailDialogVisible = ref(false)
-const layoutDrawerVisible = ref(false)
-const selectedRecordIds = ref([])
-
-const storeOptions = ['天猫旗舰店', '京东自营店', '抖音商城', '微信小店', '拼多多专营店']
-const questionTypeOptions = ['售前咨询', '订单物流', '退换售后', '活动优惠', '商品参数']
-const dashboardFilters = reactive({ dateRange: [], store: '', type: '', satisfaction: '' })
-
-const kpiCards = [
-  { title: '今日咨询量', value: '12,486', yoy: 18.6, mom: 7.4, badge: '高峰稳定', status: 'success' },
-  { title: '智能回复率', value: '92.8%', yoy: 6.2, mom: 2.1, badge: '自动承接', status: 'primary' },
-  { title: '平均响应时效', value: '8.6s', yoy: -12.4, mom: -5.8, badge: '持续优化', status: 'warning' },
-  { title: '满意度评分', value: '4.72', yoy: 3.8, mom: 1.6, badge: '口碑良好', status: 'success' }
-]
-
-const trendData = [
-  { label: '06-16', consult: 7600, latency: 13 },
-  { label: '06-17', consult: 8800, latency: 11 },
-  { label: '06-18', consult: 9300, latency: 10 },
-  { label: '06-19', consult: 10800, latency: 9 },
-  { label: '06-20', consult: 11600, latency: 8.8 },
-  { label: '06-21', consult: 12100, latency: 8.4 },
-  { label: '06-22', consult: 12486, latency: 8.6 }
-]
-
-const categoryShare = [
-  { name: '订单物流', value: 32, color: '#2f6fed' },
-  { name: '退换售后', value: 24, color: '#12b981' },
-  { name: '商品参数', value: 18, color: '#f59e0b' },
-  { name: '活动优惠', value: 16, color: '#8b5cf6' },
-  { name: '其他问题', value: 10, color: '#64748b' }
-]
-const channelShare = [
-  { name: 'APP', value: 36, color: '#0ea5e9' },
-  { name: '小程序', value: 28, color: '#22c55e' },
-  { name: '网页客服', value: 21, color: '#f97316' },
-  { name: '企微', value: 15, color: '#a855f7' }
-]
-const topQuestions = [
-  { question: '订单什么时候发货？', count: 3862, resolveRate: '96%' },
-  { question: '7天无理由退货怎么申请？', count: 2950, resolveRate: '94%' },
-  { question: '618优惠券能否叠加？', count: 2418, resolveRate: '91%' },
-  { question: '尺码偏大还是偏小？', count: 2066, resolveRate: '88%' },
-  { question: '发票抬头如何修改？', count: 1680, resolveRate: '93%' }
-]
-const heatStores = [
-  { name: '天猫旗舰店', hot: 94, wait: 18 },
-  { name: '京东自营店', hot: 82, wait: 11 },
-  { name: '抖音商城', hot: 76, wait: 23 },
-  { name: '微信小店', hot: 58, wait: 7 },
-  { name: '拼多多专营店', hot: 66, wait: 15 },
-  { name: '有赞会员店', hot: 49, wait: 5 }
-]
-const visitorBoard = [
-  { channel: '天猫', visitors: 1482, consulting: 126, trend: '+12%' },
-  { channel: '京东', visitors: 1036, consulting: 84, trend: '+8%' },
-  { channel: '抖音', visitors: 1860, consulting: 172, trend: '+21%' },
-  { channel: '微信', visitors: 642, consulting: 45, trend: '+5%' }
-]
-const alertList = [
-  { title: '低满意度集中出现', desc: '抖音商城近30分钟出现12条低满意度评价，集中在优惠券叠加问题。', time: '2分钟前', level: 'danger', tag: 'danger' },
-  { title: '未回复会话超时', desc: '京东自营店有8条会话超过3分钟未响应，建议转人工处理。', time: '8分钟前', level: 'warning', tag: 'warning' },
-  { title: '知识命中率波动', desc: '商品参数类知识命中率较昨日下降4.3%，建议复核新品资料。', time: '15分钟前', level: 'info', tag: 'primary' }
-]
-const reviewTasks = [
-  { id: 'R-1024', title: '大促价保规则回答冲突', owner: '售后组', priority: '高' },
-  { id: 'R-1025', title: '海外仓物流时效待确认', owner: '物流组', priority: '中' },
-  { id: 'R-1026', title: '新品材质参数缺少来源', owner: '商品组', priority: '中' }
-]
-const qaRecords = ref([
-  { id: 'QA20260622001', time: '2026-06-22 10:24', store: '天猫旗舰店', type: '订单物流', question: '订单今天能发出吗？', answerTime: 6.2, satisfaction: '高满意', status: '已回复' },
-  { id: 'QA20260622002', time: '2026-06-22 10:21', store: '抖音商城', type: '活动优惠', question: '满减券和会员券能一起用吗？', answerTime: 18.4, satisfaction: '低满意', status: '待复核' },
-  { id: 'QA20260622003', time: '2026-06-22 10:18', store: '京东自营店', type: '退换售后', question: '拆封后还能退货吗？', answerTime: 9.5, satisfaction: '中性', status: '已回复' },
-  { id: 'QA20260622004', time: '2026-06-22 10:15', store: '微信小店', type: '商品参数', question: '这款外套适合多少温度？', answerTime: 11.1, satisfaction: '高满意', status: '已标记' }
-])
-const layoutCards = reactive([
-  { key: 'trend', title: '折线/柱状趋势图', extra: '咨询量 · 回复时效', enabled: true, className: 'span-8' },
-  { key: 'pie', title: '环形饼图', extra: '分类 · 渠道', enabled: true, className: 'span-4' },
-  { key: 'ranking', title: 'TOP高频问题排行榜', extra: '今日', enabled: true, className: 'span-4' },
-  { key: 'heat', title: '店铺咨询热力分布图', extra: '实时', enabled: true, className: 'span-4' },
-  { key: 'visitor', title: '实时访客咨询看板', extra: '在线', enabled: true, className: 'span-4' },
-  { key: 'alert', title: '低满意度/未回复异常告警', extra: '待处理', enabled: true, className: 'span-4' },
-  { key: 'review', title: '待处理人工复核面板', extra: '3项', enabled: true, className: 'span-4' },
-  { key: 'records', title: '数据问答记录表', extra: '分页 · 排序 · 导出', enabled: true, className: 'span-12' }
-])
-const maxConsult = computed(() => Math.max(...trendData.map((item) => item.consult)))
-const trendPolyline = computed(() => trendData.map((item, index) => {
-  const x = 24 + index * 72
-  const y = 150 - (item.consult / maxConsult.value) * 112
-  return x + ',' + y
-}).join(' '))
-const enabledLayoutCards = computed(() => layoutCards.filter((card) => card.enabled))
-const formatPercent = (value) => (value > 0 ? '+' : '') + value + '%'
-const pieStyle = (items) => ({ background: 'conic-gradient(' + items.map((item, index) => {
-  const start = items.slice(0, index).reduce((sum, cur) => sum + cur.value, 0)
-  const end = start + item.value
-  return item.color + ' ' + start + '% ' + end + '%'
-}).join(', ') + ')' })
-const heatStyle = (hot) => ({ background: 'linear-gradient(90deg, rgba(47, 111, 237, ' + (0.18 + hot / 140) + ') ' + hot + '%, #eef2f7 ' + hot + '%)' })
-const resetDashboardFilters = () => {
-  Object.assign(dashboardFilters, { dateRange: [], store: '', type: '', satisfaction: '' })
-}
-const exportRecords = () => {
-  ElMessage.success('问答记录导出任务已创建')
-}
-const handleRecordSelection = (rows) => {
-  selectedRecordIds.value = rows.map((row) => row.id)
-}
-const batchMarkRecords = () => {
-  if (!selectedRecordIds.value.length) {
-    ElMessage.warning('请先选择需要标记的问答记录')
-    return
+const fetchDashboardConfig = async () => {
+  dashboardLoading.value = true
+  try {
+    dashboardConfig.value = await getDashboardConfig()
+  } catch (error) {
+    ElMessage.error(error.message || '仪表台参数加载失败')
+  } finally {
+    dashboardLoading.value = false
   }
-  qaRecords.value = qaRecords.value.map((row) => selectedRecordIds.value.includes(row.id) ? { ...row, status: '已标记' } : row)
-  ElMessage.success('已批量标记 ' + selectedRecordIds.value.length + ' 条记录')
 }
-const moveLayoutCard = (index, offset) => {
-  const target = index + offset
-  if (target < 0 || target >= layoutCards.length) return
-  const [item] = layoutCards.splice(index, 1)
-  layoutCards.splice(target, 0, item)
+
+const openConfigModal = () => {
+  const raw = dashboardConfig.value.raw || {}
+  editableConfigKeys.forEach((key) => {
+    if (raw[key] !== undefined) {
+      configForm[key] = raw[key]
+    }
+  })
+  configDescription.value = `调整仪表台参数 ${new Date().toLocaleString()}`
+  configModalVisible.value = true
+}
+
+const submitConfigForm = async () => {
+  const raw = dashboardConfig.value.raw || {}
+  const nextConfig = { ...raw }
+  editableConfigKeys.forEach((key) => {
+    nextConfig[key] = configForm[key]
+  })
+
+  configSaving.value = true
+  try {
+    await createConfigVersion({
+      config: nextConfig,
+      description: configDescription.value,
+      activate: true
+    })
+    ElMessage.success('参数已保存并启用')
+    configModalVisible.value = false
+    fetchDashboardConfig()
+  } catch (error) {
+    ElMessage.error(error.message || '参数保存失败')
+  } finally {
+    configSaving.value = false
+  }
 }
 
 const userQuery = reactive({ keyword: '', role: '', status: '' })
@@ -624,35 +667,25 @@ const userForm = reactive({
   userId: '',
   username: '',
   password: '',
+  name: '',
   displayName: '',
+  department: '',
   role: 'user',
   status: 'enabled',
+  category: 'merchant',
   remark: ''
 })
 
-const fetchUsers = () => {
+const fetchUsers = async () => {
   loading.value = true
-  setTimeout(() => {
-    userList.value = [
-      {
-        userId: 'u_10001',
-        username: 'lixiangchen',
-        displayName: 'LiXiangchen',
-        role: 'user',
-        status: 'enabled',
-        createdAt: '2026-06-21 10:00:00'
-      },
-      {
-        userId: 'u_10002',
-        username: 'zhangsan',
-        displayName: '张三',
-        role: 'admin',
-        status: 'disabled',
-        createdAt: '2026-06-21 11:00:00'
-      }
-    ]
+  try {
+    const data = await getAdminUsers(userQuery)
+    userList.value = data.items || []
+  } catch (error) {
+    ElMessage.error(error.message || '用户列表加载失败')
+  } finally {
     loading.value = false
-  }, 300)
+  }
 }
 
 const openUserModal = (type, row = null) => {
@@ -667,23 +700,48 @@ const openUserModal = (type, row = null) => {
     userId: '',
     username: '',
     password: '',
+    name: '',
     displayName: '',
+    department: '',
     role: 'user',
     status: 'enabled',
+    category: 'merchant',
     remark: ''
   })
 }
 
-const submitUserForm = () => {
-  ElMessage.success(userModalType.value === 'add' ? '用户创建成功' : '用户信息已更新')
-  userModalVisible.value = false
-  fetchUsers()
+const buildUserPayload = () => ({
+  username: userForm.username,
+  password: userForm.password || undefined,
+  displayName: userForm.displayName,
+  name: userForm.name || userForm.displayName,
+  department: userForm.department,
+  role: userForm.role,
+  status: userForm.status,
+  category: userForm.role === 'admin' ? 'admin' : userForm.category
+})
+
+const submitUserForm = async () => {
+  try {
+    if (userModalType.value === 'add') {
+      await createAdminUser(buildUserPayload())
+      ElMessage.success('用户创建成功')
+    } else {
+      await updateAdminUser(userForm.userId, buildUserPayload())
+      ElMessage.success('用户信息已更新')
+    }
+    userModalVisible.value = false
+    fetchUsers()
+  } catch (error) {
+    ElMessage.error(error.message || '用户保存失败')
+  }
 }
 
-const deleteUser = (id) => {
-  ElMessageBox.confirm('确定删除该账号吗？', '提示', { type: 'warning' })
-    .then(() => {
-      ElMessage.success(`用户 ${id} 已删除`)
+const disableUser = (id) => {
+  ElMessageBox.confirm('确定禁用该账号吗？禁用后该用户不能继续登录。', '提示', { type: 'warning' })
+    .then(async () => {
+      await disableAdminUser(id)
+      ElMessage.success(`用户 ${id} 已禁用`)
       fetchUsers()
     })
     .catch(() => {})
@@ -692,6 +750,279 @@ const deleteUser = (id) => {
 const resetUserQuery = () => {
   Object.assign(userQuery, { keyword: '', role: '', status: '' })
   fetchUsers()
+}
+
+const historyLoading = ref(false)
+const historyMessageLoading = ref(false)
+const historyDrawerVisible = ref(false)
+const historyFallbackNotified = ref(false)
+const historyDataMode = ref('api')
+const historyUserOptions = ref([])
+const conversationHistory = ref([])
+const activeHistorySession = ref(null)
+const activeHistoryMessages = ref([])
+const historyQuery = reactive({
+  userId: '',
+  knowledge_base_type: '',
+  keyword: ''
+})
+
+const demoHistoryUsers = [
+  { userId: 101, username: 'merchant_user', displayName: '企业用户A' },
+  { userId: 102, username: 'personal_user', displayName: '个人用户B' },
+  { userId: 103, username: 'service_user', displayName: '客服测试用户' }
+]
+
+const demoConversationHistory = ref([
+  {
+    conversationId: 'conv_10001',
+    userId: 101,
+    username: 'merchant_user',
+    displayName: '企业用户A',
+    title: '企业店保证金咨询',
+    knowledgeBaseType: 'enterprise',
+    knowledgeBaseName: '企业知识库',
+    messageCount: 4,
+    lastMessageAt: '2026-06-22 09:35:12'
+  },
+  {
+    conversationId: 'conv_10002',
+    userId: 102,
+    username: 'personal_user',
+    displayName: '个人用户B',
+    title: '个人店入驻资料要求',
+    knowledgeBaseType: 'personal',
+    knowledgeBaseName: '个人知识库',
+    messageCount: 3,
+    lastMessageAt: '2026-06-22 10:14:28'
+  },
+  {
+    conversationId: 'conv_10003',
+    userId: 101,
+    username: 'merchant_user',
+    displayName: '企业用户A',
+    title: '发票和结算规则',
+    knowledgeBaseType: 'enterprise',
+    knowledgeBaseName: '企业知识库',
+    messageCount: 5,
+    lastMessageAt: '2026-06-22 11:02:46'
+  }
+])
+
+const demoHistoryMessages = ref({
+  conv_10001: [
+    {
+      messageId: 'msg_10001_1',
+      role: 'user',
+      content: '企业店保证金怎么收取？',
+      createdAt: '2026-06-22 09:31:02'
+    },
+    {
+      messageId: 'msg_10001_2',
+      role: 'assistant',
+      content: '企业店保证金通常按经营类目、店铺类型和平台规则收取，具体金额以后端知识库返回为准。',
+      createdAt: '2026-06-22 09:31:05'
+    },
+    {
+      messageId: 'msg_10001_3',
+      role: 'user',
+      content: '如果多个类目一起经营怎么办？',
+      createdAt: '2026-06-22 09:34:51'
+    },
+    {
+      messageId: 'msg_10001_4',
+      role: 'assistant',
+      content: '多类目经营通常需要按平台规则取较高标准或分别校验，建议结合具体类目查询。',
+      createdAt: '2026-06-22 09:35:12'
+    }
+  ],
+  conv_10002: [
+    {
+      messageId: 'msg_10002_1',
+      role: 'user',
+      content: '个人店入驻需要哪些资料？',
+      createdAt: '2026-06-22 10:12:40'
+    },
+    {
+      messageId: 'msg_10002_2',
+      role: 'assistant',
+      content: '个人店通常需要身份信息、联系方式和经营类目相关资料。',
+      createdAt: '2026-06-22 10:12:43'
+    },
+    {
+      messageId: 'msg_10002_3',
+      role: 'user',
+      content: '个体工商户也走个人知识库吗？',
+      createdAt: '2026-06-22 10:14:28'
+    }
+  ],
+  conv_10003: [
+    {
+      messageId: 'msg_10003_1',
+      role: 'user',
+      content: '企业店发票怎么开？',
+      createdAt: '2026-06-22 10:58:19'
+    },
+    {
+      messageId: 'msg_10003_2',
+      role: 'assistant',
+      content: '发票开具需要结合结算主体、订单类型和平台规则确认。',
+      createdAt: '2026-06-22 10:58:23'
+    },
+    {
+      messageId: 'msg_10003_3',
+      role: 'user',
+      content: '结算周期在哪里看？',
+      createdAt: '2026-06-22 11:01:54'
+    },
+    {
+      messageId: 'msg_10003_4',
+      role: 'assistant',
+      content: '结算周期一般在后台结算中心或合同规则中查看。',
+      createdAt: '2026-06-22 11:01:58'
+    },
+    {
+      messageId: 'msg_10003_5',
+      role: 'user',
+      content: '可以导出结算明细吗？',
+      createdAt: '2026-06-22 11:02:46'
+    }
+  ]
+})
+
+const historySummary = computed(() => {
+  const userIds = new Set(conversationHistory.value.map((item) => item.userId))
+  return {
+    sessionCount: conversationHistory.value.length,
+    messageCount: conversationHistory.value.reduce((sum, item) => sum + Number(item.messageCount || 0), 0),
+    userCount: userIds.size
+  }
+})
+
+const notifyHistoryFallback = () => {
+  if (historyFallbackNotified.value) return
+  historyFallbackNotified.value = true
+  ElMessage.warning('历史会话接口暂不可用，已切换为前端演示数据')
+}
+
+const normalizeHistoryUser = (user) => ({
+  userId: user.userId ?? user.user_id ?? user.id,
+  username: user.username || user.account || '-',
+  displayName: user.displayName || user.display_name || user.name || user.username || '-'
+})
+
+const normalizeConversation = (item) => ({
+  conversationId: item.conversationId ?? item.conversation_id ?? item.id,
+  userId: item.userId ?? item.user_id ?? item.owner_id,
+  username: item.username || item.user?.username || '-',
+  displayName: item.displayName || item.display_name || item.user?.displayName || item.user?.name || '-',
+  title: item.title || item.summary || '未命名会话',
+  knowledgeBaseType: item.knowledgeBaseType || item.knowledge_base_type || '',
+  knowledgeBaseName: item.knowledgeBaseName || item.knowledge_base_name || '-',
+  messageCount: item.messageCount ?? item.message_count ?? item.messages?.length ?? 0,
+  lastMessageAt: item.lastMessageAt || item.last_message_at || item.updatedAt || item.updated_at || '-'
+})
+
+const normalizeHistoryMessage = (message) => ({
+  messageId: message.messageId ?? message.message_id ?? message.id,
+  role: message.role || message.sender_role || 'user',
+  content: message.content || message.answer || message.question || '',
+  createdAt: message.createdAt || message.created_at || '-'
+})
+
+const filterDemoConversationHistory = () => {
+  const keyword = historyQuery.keyword.trim()
+  return demoConversationHistory.value.filter((item) => {
+    const matchedUser = !historyQuery.userId || String(item.userId) === String(historyQuery.userId)
+    const matchedKnowledge = !historyQuery.knowledge_base_type || item.knowledgeBaseType === historyQuery.knowledge_base_type
+    const matchedKeyword =
+      !keyword ||
+      item.title.includes(keyword) ||
+      (demoHistoryMessages.value[item.conversationId] || []).some((message) => message.content.includes(keyword))
+    return matchedUser && matchedKnowledge && matchedKeyword
+  })
+}
+
+const fetchHistoryUsers = async () => {
+  try {
+    const data = await getAdminConversationUsers()
+    const users = Array.isArray(data) ? data : data.items || []
+    historyUserOptions.value = users.map(normalizeHistoryUser)
+  } catch (error) {
+    historyDataMode.value = 'demo'
+    historyUserOptions.value = demoHistoryUsers
+    notifyHistoryFallback()
+  }
+}
+
+const fetchConversationHistory = async () => {
+  historyLoading.value = true
+  try {
+    const data = await getAdminConversations(historyQuery)
+    const items = Array.isArray(data) ? data : data.items || []
+    conversationHistory.value = items.map(normalizeConversation)
+    historyDataMode.value = 'api'
+  } catch (error) {
+    historyDataMode.value = 'demo'
+    conversationHistory.value = filterDemoConversationHistory()
+    notifyHistoryFallback()
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+const resetHistoryQuery = () => {
+  Object.assign(historyQuery, { userId: '', knowledge_base_type: '', keyword: '' })
+  fetchConversationHistory()
+}
+
+const openHistoryMessages = async (row) => {
+  activeHistorySession.value = row
+  historyDrawerVisible.value = true
+  historyMessageLoading.value = true
+
+  try {
+    if (historyDataMode.value === 'demo') {
+      activeHistoryMessages.value = demoHistoryMessages.value[row.conversationId] || []
+      return
+    }
+
+    const data = await getAdminConversationMessages(row.conversationId)
+    const items = Array.isArray(data) ? data : data.items || []
+    activeHistoryMessages.value = items.map(normalizeHistoryMessage)
+  } catch (error) {
+    activeHistoryMessages.value = demoHistoryMessages.value[row.conversationId] || []
+    if (activeHistoryMessages.value.length === 0) {
+      ElMessage.error(error.message || '会话消息加载失败')
+    }
+  } finally {
+    historyMessageLoading.value = false
+  }
+}
+
+const deleteHistoryConversation = (row) => {
+  ElMessageBox.confirm(`确定删除会话“${row.title}”吗？删除后该用户端历史会话不可恢复。`, '删除历史会话', {
+    type: 'warning'
+  })
+    .then(async () => {
+      if (historyDataMode.value === 'api') {
+        await deleteAdminConversation(row.conversationId)
+      } else {
+        demoConversationHistory.value = demoConversationHistory.value.filter(
+          (item) => item.conversationId !== row.conversationId
+        )
+        delete demoHistoryMessages.value[row.conversationId]
+      }
+
+      if (activeHistorySession.value?.conversationId === row.conversationId) {
+        historyDrawerVisible.value = false
+        activeHistorySession.value = null
+        activeHistoryMessages.value = []
+      }
+      ElMessage.success('历史会话已删除')
+      fetchConversationHistory()
+    })
+    .catch(() => {})
 }
 
 const kbQuery = reactive({ keyword: '', status: '' })
@@ -809,103 +1140,208 @@ const deleteEval = (id) => {
 }
 
 onMounted(() => {
+  fetchDashboardConfig()
   fetchUsers()
+  fetchHistoryUsers()
+  fetchConversationHistory()
   fetchKBs()
   fetchEvals()
 })
 </script>
 
 <style scoped>
-
-.commerce-dashboard { min-height: calc(100vh - 108px); color: #1f2937; }
-.dashboard-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - 108px); overflow: hidden; background: #f3f6fb; border: 1px solid #e5e7eb; border-radius: 8px; }
-.dashboard-sidebar { padding: 18px 14px; background: #101828; border-right: 1px solid rgba(255, 255, 255, 0.08); }
-.brand-block { display: flex; gap: 12px; align-items: center; padding: 0 8px 18px; color: #ffffff; }
-.brand-logo { display: grid; width: 36px; height: 36px; font-weight: 700; color: #ffffff; place-items: center; background: #2f6fed; border-radius: 8px; }
-.brand-block strong, .brand-block span { display: block; }
-.brand-block span { margin-top: 4px; font-size: 12px; color: #98a2b3; }
-.dashboard-menu { --el-menu-bg-color: transparent; --el-menu-text-color: #cbd5e1; --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08); --el-menu-active-color: #ffffff; border-right: none; }
-.dashboard-menu :deep(.el-sub-menu__title), .dashboard-menu :deep(.el-menu-item) { border-radius: 8px; }
-.dashboard-main { min-width: 0; padding: 18px; overflow-y: auto; }
-.dashboard-header, .dashboard-breadcrumb-row, .dashboard-filter, .kpi-card, .dashboard-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; }
-.dashboard-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
-.header-left, .header-actions, .dashboard-breadcrumb-row, .dashboard-toolbar-actions, .compare-row, .card-title-row, .legend-row, .heat-meta, .review-item, .layout-config-item { display: flex; align-items: center; }
-.header-left { flex: 1; gap: 18px; min-width: 0; }
-.header-logo { flex: none; font-size: 17px; font-weight: 700; color: #111827; }
-.global-search { max-width: 420px; }
-.header-actions { gap: 12px; }
-.dashboard-breadcrumb-row { justify-content: space-between; margin-top: 14px; padding: 12px 16px; }
-.dashboard-toolbar-actions { gap: 10px; }
-.dashboard-filter { flex-wrap: wrap; margin-top: 14px; padding: 14px; }
-.dashboard-filter :deep(.el-date-editor), .dashboard-filter :deep(.el-select) { width: 220px; }
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
-.kpi-card { padding: 18px; }
-.kpi-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: #64748b; }
-.kpi-card strong { display: block; margin-bottom: 12px; font-size: 28px; color: #111827; }
-.compare-row { gap: 12px; font-size: 12px; }
-.up { color: #059669; }
-.down { color: #dc2626; }
-.dashboard-layout-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: stretch; margin-top: 14px; }
-.dashboard-card { display: flex; flex-direction: column; min-width: 0; min-height: 280px; padding: 16px; }
-.span-4 { grid-column: span 4; }
-.span-8 { grid-column: span 8; }
-.span-12 { grid-column: span 12; }
-.card-title-row { justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.card-title-row h3 { margin: 0; font-size: 15px; color: #111827; }
-.card-title-row span { font-size: 12px; color: #64748b; }
-.trend-chart { flex: 1; min-height: 230px; }
-.trend-chart svg { width: 100%; height: 185px; background: linear-gradient(#ffffff 24px, #f8fafc 25px); background-size: 100% 40px; border: 1px solid #eef2f7; border-radius: 8px; }
-.chart-axis { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 8px; font-size: 12px; color: #64748b; text-align: center; }
-.legend-row { gap: 18px; font-size: 12px; color: #475467; }
-.legend::before { display: inline-block; width: 9px; height: 9px; margin-right: 6px; content: ''; border-radius: 50%; }
-.legend.blue::before { background: #2f6fed; }
-.legend.green::before { background: #12b981; }
-.pie-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.pie-block { display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 16px; align-items: center; }
-.donut { display: grid; width: 138px; height: 138px; place-items: center; border-radius: 50%; }
-.donut span { display: grid; width: 76px; height: 76px; font-weight: 700; color: #334155; place-items: center; background: #ffffff; border-radius: 50%; }
-.pie-legend p { margin: 8px 0; font-size: 13px; color: #475467; }
-.pie-legend i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; }
-.rank-list, .heat-list, .mini-alert-list, .review-list, .alert-stack, .layout-config-list { display: flex; flex: 1; flex-direction: column; gap: 10px; }
-.rank-item { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: center; padding: 10px; background: #f8fafc; border-radius: 8px; }
-.rank-item b { display: grid; width: 26px; height: 26px; color: #ffffff; place-items: center; background: #2f6fed; border-radius: 6px; }
-.rank-item strong, .rank-item span, .review-item strong, .review-item span { display: block; }
-.rank-item span, .review-item span { margin-top: 4px; font-size: 12px; color: #64748b; }
-.heat-meta { justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-.heat-meta em { font-style: normal; color: #2f6fed; }
-.heat-bar { height: 30px; overflow: hidden; border-radius: 8px; }
-.heat-bar span { display: inline-flex; align-items: center; height: 30px; padding-left: 10px; font-size: 12px; color: #334155; }
-.visitor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.visitor-item { padding: 12px; background: #f8fafc; border-radius: 8px; }
-.visitor-item span, .visitor-item small, .visitor-item strong { display: block; }
-.visitor-item strong { margin: 8px 0; font-size: 24px; color: #111827; }
-.visitor-item small { color: #64748b; }
-.mini-alert, .alert-item { padding: 12px; border: 1px solid #e5e7eb; border-left-width: 4px; border-radius: 8px; }
-.mini-alert strong, .mini-alert span, .alert-item strong, .alert-item p { display: block; }
-.mini-alert span, .alert-item p { margin: 6px 0 0; font-size: 12px; color: #64748b; }
-.mini-alert.danger, .alert-item.danger { border-left-color: #ef4444; }
-.mini-alert.warning, .alert-item.warning { border-left-color: #f59e0b; }
-.mini-alert.info, .alert-item.info { border-left-color: #2f6fed; }
-.alert-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.review-item { justify-content: space-between; gap: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; }
-.review-item em { flex: none; padding: 3px 8px; font-size: 12px; font-style: normal; color: #b45309; background: #fff7ed; border-radius: 999px; }
-.record-actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 12px; }
-.table-card { min-height: 420px; }
-.table-card :deep(.el-table) { border-radius: 8px; }
-.pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
-.layout-config-item { justify-content: space-between; padding: 12px; border: 1px solid #eef2f7; border-radius: 8px; }
-.dark-theme .dashboard-shell { background: #111827; border-color: #334155; }
-.dark-theme .dashboard-header, .dark-theme .dashboard-breadcrumb-row, .dark-theme .dashboard-filter, .dark-theme .kpi-card, .dark-theme .dashboard-card { color: #e5e7eb; background: #182230; border-color: #334155; }
-.dark-theme .header-logo, .dark-theme .kpi-card strong, .dark-theme .card-title-row h3, .dark-theme .visitor-item strong { color: #f8fafc; }
-.dark-theme .visitor-item, .dark-theme .rank-item, .dark-theme .review-item, .dark-theme .trend-chart svg { background: #101828; }
-@media (max-width: 1280px) { .dashboard-shell { grid-template-columns: 1fr; } .dashboard-sidebar { display: none; } .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .span-4, .span-8, .span-12 { grid-column: span 1; } .table-card { grid-column: span 2; } }
-@media (max-width: 860px) { .dashboard-header, .dashboard-breadcrumb-row { align-items: flex-start; flex-direction: column; gap: 12px; } .header-left { align-items: stretch; flex-direction: column; width: 100%; } .global-search { max-width: none; } .kpi-grid, .dashboard-layout-grid, .pie-grid, .pie-block, .visitor-grid { grid-template-columns: 1fr; } .span-4, .span-8, .span-12, .table-card { grid-column: span 1; } }
-
 .pane-card {
   padding: 20px;
   background: #ffffff;
   border: 1px solid #f2f3f5;
   border-radius: 8px;
+}
+
+.dashboard-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-header,
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-header h2,
+.dashboard-header p,
+.pane-card h3,
+.pane-card h4 {
+  margin: 0;
+}
+
+.dashboard-header p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.param-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 82px;
+  padding: 14px;
+  background: #f7f9fc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.param-card span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.param-card strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  color: #1d2129;
+}
+
+.dashboard-two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.history-title h2,
+.history-title p {
+  margin: 0;
+}
+
+.history-title h2 {
+  font-size: 18px;
+  color: #1d2129;
+}
+
+.history-title p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.history-filter {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+.history-search-input {
+  width: 260px;
+}
+
+.history-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.history-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 86px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #f2f3f5;
+  border-radius: 8px;
+}
+
+.history-summary-card span {
+  font-size: 13px;
+  color: #86909c;
+}
+
+.history-summary-card strong {
+  font-size: 24px;
+  color: #1d2129;
+}
+
+.history-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-user-cell strong {
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.history-user-cell span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.history-drawer-meta {
+  margin-bottom: 18px;
+}
+
+.history-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 240px;
+}
+
+.history-message-item {
+  padding: 14px;
+  background: #f7f9fc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.history-message-item.assistant {
+  background: #f2f6ff;
+  border-color: #d7e4ff;
+}
+
+.history-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.history-message-head span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.history-message-item p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1d2129;
 }
 
 .filter-wrapper {
@@ -1004,7 +1440,35 @@ onMounted(() => {
   gap: 20px;
 }
 
+.three-column,
+.four-column {
+  display: grid;
+  gap: 16px;
+}
+
+.three-column {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.four-column {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .upload-drag {
   width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .history-toolbar {
+    flex-direction: column;
+  }
+
+  .history-filter {
+    justify-content: flex-start;
+  }
+
+  .history-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

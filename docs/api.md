@@ -221,6 +221,96 @@ DELETE /api/admin/users/{user_id}
 
 说明：当前实现是禁用账号，不是物理删除。管理员不能禁用自己。
 
+### 2.6 历史会话管理
+
+所有接口都需要管理员 token，用于管理员端隔离查看不同用户的用户端会话历史。
+
+#### 2.6.1 会话用户列表
+
+```http
+GET /api/admin/conversations/users
+```
+
+响应 `data`：
+
+```json
+{
+  "items": [
+    {
+      "userId": 101,
+      "username": "merchant_user",
+      "displayName": "企业用户A"
+    }
+  ]
+}
+```
+
+#### 2.6.2 历史会话列表
+
+```http
+GET /api/admin/conversations
+```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `userId` | `number/string` | 否 | 按指定用户隔离查询 |
+| `knowledge_base_type` | `string` | 否 | `enterprise` 或 `personal` |
+| `keyword` | `string` | 否 | 搜索会话标题或消息内容 |
+| `page` | `number` | 否 | 默认 `1` |
+| `page_size` | `number` | 否 | 默认 `100` |
+
+响应 `data`：
+
+```json
+{
+  "items": [
+    {
+      "conversationId": "conv_10001",
+      "userId": 101,
+      "username": "merchant_user",
+      "displayName": "企业用户A",
+      "title": "企业店保证金咨询",
+      "knowledgeBaseType": "enterprise",
+      "knowledgeBaseName": "企业知识库",
+      "messageCount": 4,
+      "lastMessageAt": "2026-06-22 09:35:12"
+    }
+  ],
+  "total": 1
+}
+```
+
+#### 2.6.3 会话消息列表
+
+```http
+GET /api/admin/conversations/{conversation_id}/messages
+```
+
+响应 `data`：
+
+```json
+{
+  "items": [
+    {
+      "messageId": "msg_10001_1",
+      "role": "user",
+      "content": "企业店保证金怎么收取？",
+      "createdAt": "2026-06-22 09:31:02"
+    }
+  ]
+}
+```
+
+#### 2.6.4 删除指定历史会话
+
+```http
+DELETE /api/admin/conversations/{conversation_id}
+```
+
+说明：删除指定用户的一条历史会话记录，同时应删除该会话下的消息明细。
+
 ## 3. 仪表台参数配置
 
 所有接口都需要管理员 token。

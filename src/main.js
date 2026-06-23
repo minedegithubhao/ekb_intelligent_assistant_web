@@ -6,9 +6,6 @@ import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import './styles/global.css'
 
-localStorage.removeItem('token')
-localStorage.removeItem('userInfo')
-
 const app = createApp(App)
 
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

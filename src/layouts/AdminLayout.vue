@@ -34,6 +34,9 @@
           <span class="current">{{ menuTitleMap[activeMenu] }}</span>
         </div>
         <div class="user-info">
+          <el-button type="primary" plain size="small" :icon="ChatDotRound" @click="goUserChat">
+            进入用户端
+          </el-button>
           <el-avatar :size="32">管</el-avatar>
           <span class="nickname">管理员</span>
           <el-tag size="small" type="primary" effect="plain">Admin</el-tag>
@@ -49,9 +52,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { DataAnalysis, FolderOpened, Setting, User } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { ChatDotRound, DataAnalysis, FolderOpened, Setting, User } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['menu-change'])
+const router = useRouter()
 
 const activeMenu = ref('dashboard')
 const menuTitleMap = {
@@ -64,6 +69,10 @@ const menuTitleMap = {
 const handleMenuSelect = (index) => {
   activeMenu.value = index
   emit('menu-change', index)
+}
+
+const goUserChat = () => {
+  router.push('/user-chat')
 }
 </script>
 

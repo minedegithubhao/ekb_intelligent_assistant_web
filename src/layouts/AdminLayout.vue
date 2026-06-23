@@ -19,6 +19,14 @@
           <el-icon><ChatDotRound /></el-icon>
           <span>历史会话管理</span>
         </el-menu-item>
+        <el-menu-item index="keywordRules">
+          <el-icon><Collection /></el-icon>
+          <span>关键词规则匹配</span>
+        </el-menu-item>
+        <el-menu-item index="termNormalizations">
+          <el-icon><Operation /></el-icon>
+          <span>归一化词改写配置</span>
+        </el-menu-item>
         <el-menu-item index="knowledge">
           <el-icon><FolderOpened /></el-icon>
           <span>知识库管理</span>
@@ -38,6 +46,7 @@
           <span class="current">{{ menuTitleMap[activeMenu] }}</span>
         </div>
         <div class="user-info">
+          <el-button type="primary" plain :icon="ChatLineRound" @click="goUserChat">进入用户端</el-button>
           <el-avatar :size="32">管</el-avatar>
           <span class="nickname">管理员</span>
           <el-tag size="small" type="primary" effect="plain">Admin</el-tag>
@@ -53,15 +62,28 @@
 
 <script setup>
 import { ref } from 'vue'
-import { ChatDotRound, DataAnalysis, FolderOpened, Setting, User } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import {
+  ChatDotRound,
+  ChatLineRound,
+  Collection,
+  DataAnalysis,
+  FolderOpened,
+  Operation,
+  Setting,
+  User
+} from '@element-plus/icons-vue'
 
 const emit = defineEmits(['menu-change'])
+const router = useRouter()
 
 const activeMenu = ref('dashboard')
 const menuTitleMap = {
   dashboard: '仪表台参数',
   users: '用户管理',
   history: '历史会话管理',
+  keywordRules: '关键词规则匹配',
+  termNormalizations: '归一化词改写配置',
   knowledge: '知识库管理',
   evaluations: '评估管理'
 }
@@ -69,6 +91,10 @@ const menuTitleMap = {
 const handleMenuSelect = (index) => {
   activeMenu.value = index
   emit('menu-change', index)
+}
+
+const goUserChat = () => {
+  router.push('/user-chat')
 }
 </script>
 

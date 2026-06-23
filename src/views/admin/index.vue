@@ -12,7 +12,7 @@
               v{{ dashboardConfig.version.version_no }} · {{ dashboardConfig.version.status }}
             </el-tag>
             <el-button @click="fetchDashboardConfig">刷新</el-button>
-            <el-button type="primary" @click="openConfigModal">修改参数</el-button>
+            <el-button type="primary" @click="openConfigModal">新增配置</el-button>
           </div>
         </div>
 
@@ -30,53 +30,53 @@
             <strong>{{ dashboardConfig.rerank_model || '-' }}</strong>
           </div>
           <div class="param-card">
+            <span>稀疏检索</span>
+            <strong>{{ dashboardConfig.sparse_retrieval || '-' }}</strong>
+          </div>
+          <div class="param-card">
             <span>变体生成</span>
             <strong>{{ dashboardConfig.variant_generation_enabled ? '开' : '关' }}</strong>
           </div>
-          <div class="param-card">
-            <span>重排</span>
-            <strong>{{ dashboardConfig.rerank_enabled ? '开' : '关' }}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-two-column">
-        <div class="pane-card">
-          <h3>TopK</h3>
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="FAQ">{{ dashboardConfig.top_k?.faq ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="Doc">{{ dashboardConfig.top_k?.doc ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="Rerank">{{ dashboardConfig.top_k?.rerank ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="Final Evidence">
-              {{ dashboardConfig.top_k?.final_evidence ?? '-' }}
-            </el-descriptions-item>
-          </el-descriptions>
-        </div>
-
-        <div class="pane-card">
-          <h3>阈值</h3>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="FAQ 高置信">
-              {{ dashboardConfig.thresholds?.faq_high_conf ?? '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="FAQ 中置信">
-              {{ dashboardConfig.thresholds?.faq_middle_conf ?? '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="文档证据">
-              {{ dashboardConfig.thresholds?.doc_evidence ?? '-' }}
-            </el-descriptions-item>
-          </el-descriptions>
         </div>
       </div>
 
       <div class="pane-card">
-        <h3>权重</h3>
-        <el-descriptions :column="4" border>
-          <el-descriptions-item label="FAQ Dense">{{ dashboardConfig.weights?.faq_dense ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="FAQ Sparse">{{ dashboardConfig.weights?.faq_sparse ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Doc Dense">{{ dashboardConfig.weights?.doc_dense ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Doc Sparse">{{ dashboardConfig.weights?.doc_sparse ?? '-' }}</el-descriptions-item>
-        </el-descriptions>
+        <h3>参数版本管理</h3>
+        <el-table :data="configVersions" v-loading="configVersionsLoading" style="width: 100%">
+          <el-table-column prop="id" label="版本ID" width="90" />
+          <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.is_enabled ? 'success' : 'info'" size="small">
+                {{ scope.row.is_enabled ? '启用中' : '未启用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="创建时间" width="180" />
+          <el-table-column prop="activated_at" label="启用时间" width="180" />
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="scope">
+              <el-button
+                link
+                type="primary"
+                :disabled="scope.row.is_enabled"
+                @click="activateConfig(scope.row.id)"
+              >
+                启用
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="pane-card">
+        <h3>当前启用热参数</h3>
+        <el-table :data="dashboardParamRows" v-loading="dashboardLoading" style="width: 100%">
+          <el-table-column prop="label" label="参数" width="260" />
+          <el-table-column prop="key" label="字段名" width="260" />
+          <el-table-column prop="value" label="当前值" width="160" />
+          <el-table-column prop="description" label="说明" min-width="320" />
+        </el-table>
       </div>
     </section>
 
@@ -99,6 +99,7 @@
       <el-table :data="userList" v-loading="loading" style="width: 100%">
         <el-table-column prop="userId" label="用户ID" width="110" />
         <el-table-column prop="username" label="账号" />
+        <el-table-column prop="name" label="姓名" />
         <el-table-column prop="displayName" label="显示名称" />
         <el-table-column prop="department" label="部门" />
         <el-table-column prop="role" label="角色">
@@ -218,6 +219,98 @@
           </el-table-column>
         </el-table>
       </div>
+    </section>
+
+    <section v-if="currentTab === 'keywordRules'" class="keyword-rule-panel">
+      <div class="pane-card">
+        <div class="dashboard-header">
+          <div>
+            <h2>关键词规则匹配</h2>
+            <p>维护检索流程第一步规则匹配使用的四类固定关键词集合。</p>
+          </div>
+          <el-button @click="fetchKeywordRules">刷新</el-button>
+        </div>
+      </div>
+
+      <div
+        v-for="rule in keywordRules"
+        :key="rule.rule_code"
+        class="pane-card keyword-rule-card"
+        v-loading="keywordRulesLoading"
+      >
+        <div class="keyword-rule-head">
+          <div>
+            <h3>{{ rule.rule_name }}</h3>
+            <p>{{ rule.rule_code }} · {{ rule.match_type }} · 排序 {{ rule.match_order }}</p>
+          </div>
+          <el-tag :type="rule.is_enabled ? 'success' : 'info'" effect="plain">
+            {{ rule.is_enabled ? '已启用' : '已停用' }}
+          </el-tag>
+        </div>
+        <el-form label-position="top">
+          <el-form-item label="关键词集合">
+            <el-select
+              v-model="rule.editKeywords"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              style="width: 100%"
+              placeholder="输入关键词后按回车添加"
+            />
+          </el-form-item>
+          <el-form-item label="规则回复文本">
+            <el-input :model-value="rule.response_text || '-'" disabled />
+          </el-form-item>
+        </el-form>
+        <div class="panel-actions">
+          <el-button type="primary" @click="saveKeywordRule(rule)">保存关键词</el-button>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="currentTab === 'termNormalizations'" class="pane-card">
+      <div class="dashboard-header">
+        <div>
+          <h2>规则变体归一化词改写配置</h2>
+          <p>维护规则变体生成前使用的标准词和别名集合。</p>
+        </div>
+        <div class="dashboard-actions">
+          <el-button @click="fetchTermNormalizations">刷新</el-button>
+          <el-button type="primary" @click="openTermModal('add')">新增归一化词</el-button>
+        </div>
+      </div>
+
+      <el-table :data="termNormalizations" v-loading="termLoading" style="width: 100%; margin-top: 20px">
+        <el-table-column prop="canonical_term" label="标准词" width="180" />
+        <el-table-column label="别名集合" min-width="280">
+          <template #default="scope">
+            <el-tag
+              v-for="alias in scope.row.aliases"
+              :key="alias"
+              class="term-alias"
+              effect="plain"
+            >
+              {{ alias }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="match_type" label="匹配方式" width="120" />
+        <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="scope.row.is_enabled ? 'success' : 'info'" size="small">
+              {{ scope.row.is_enabled ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="scope">
+            <el-button link type="primary" @click="openTermModal('edit', scope.row)">编辑</el-button>
+            <el-button link type="danger" @click="removeTerm(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </section>
 
     <section v-if="currentTab === 'knowledge'" class="pane-card">
@@ -384,7 +477,7 @@
     <el-dialog v-model="userModalVisible" :title="userModalType === 'add' ? '新增用户' : '修改用户信息'" width="480px">
       <el-form :model="userForm" label-position="top">
         <el-form-item v-if="userModalType === 'add'" label="用户账号">
-          <el-input v-model="userForm.username" placeholder="请输入用于登录的唯一账号" />
+          <el-input v-model="userForm.username" placeholder="仅允许英文和数字" />
         </el-form-item>
         <el-form-item v-if="userModalType === 'add'" label="初始密码">
           <el-input v-model="userForm.password" type="password" placeholder="请输入密码" show-password />
@@ -429,80 +522,77 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="configModalVisible" title="修改仪表台参数" width="720px">
-      <el-form :model="configForm" label-position="top">
-        <div class="two-column">
-          <el-form-item label="模型">
-            <el-input v-model="configForm.model" />
-          </el-form-item>
-          <el-form-item label="Embedding 模型">
-            <el-input v-model="configForm.embedding_model" />
-          </el-form-item>
-        </div>
-        <el-form-item label="重排模型">
-          <el-input v-model="configForm.rerank_model" />
-        </el-form-item>
-        <div class="two-column">
-          <el-form-item label="变体生成">
-            <el-switch v-model="configForm.variant_generation_enabled" active-text="开" inactive-text="关" />
-          </el-form-item>
-          <el-form-item label="重排">
-            <el-switch v-model="configForm.rerank_enabled" active-text="开" inactive-text="关" />
-          </el-form-item>
-        </div>
-
-        <h4>TopK</h4>
-        <div class="four-column">
-          <el-form-item label="FAQ">
-            <el-input-number v-model="configForm.faq_k" :min="1" />
-          </el-form-item>
-          <el-form-item label="Doc">
-            <el-input-number v-model="configForm.doc_k" :min="1" />
-          </el-form-item>
-          <el-form-item label="Rerank">
-            <el-input-number v-model="configForm.rerank_top_k" :min="1" />
-          </el-form-item>
-          <el-form-item label="Final Evidence">
-            <el-input-number v-model="configForm.final_evidence_top_k" :min="1" />
-          </el-form-item>
+    <el-dialog v-model="configModalVisible" title="新增参数配置" width="1080px">
+      <el-form :model="configForm" label-position="top" class="config-form">
+        <div v-for="group in configParamGroups" :key="group.name" class="config-section">
+          <div class="config-section-title">
+            <h4>{{ group.name }}</h4>
+            <span>{{ group.description }}</span>
+          </div>
+          <el-table :data="group.items" border class="config-edit-table">
+            <el-table-column prop="label" label="参数" width="210" />
+            <el-table-column prop="key" label="字段名" width="260" />
+            <el-table-column label="配置值" width="190">
+              <template #default="scope">
+                <template v-if="scope.row.type === 'boolean'">
+                  <el-switch v-model="configForm[scope.row.key]" active-text="开" inactive-text="关" />
+                </template>
+                <template v-else>
+                  <el-input-number
+                    v-model="configForm[scope.row.key]"
+                    :min="scope.row.min"
+                    :max="scope.row.max"
+                    :step="scope.row.step"
+                    controls-position="right"
+                    @change="handleConfigFieldChange(scope.row.key)"
+                  />
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" label="说明" min-width="280" />
+          </el-table>
         </div>
 
-        <h4>阈值</h4>
-        <div class="three-column">
-          <el-form-item label="FAQ 高置信">
-            <el-input-number v-model="configForm.faq_high_conf_threshold" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-          <el-form-item label="FAQ 中置信">
-            <el-input-number v-model="configForm.faq_middle_conf_threshold" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-          <el-form-item label="文档证据">
-            <el-input-number v-model="configForm.doc_evidence_threshold" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-        </div>
-
-        <h4>权重</h4>
-        <div class="four-column">
-          <el-form-item label="FAQ Dense">
-            <el-input-number v-model="configForm.faq_dense_weight" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-          <el-form-item label="FAQ Sparse">
-            <el-input-number v-model="configForm.faq_sparse_weight" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-          <el-form-item label="Doc Dense">
-            <el-input-number v-model="configForm.doc_dense_weight" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-          <el-form-item label="Doc Sparse">
-            <el-input-number v-model="configForm.doc_sparse_weight" :min="0" :max="1" :step="0.01" />
-          </el-form-item>
-        </div>
-
-        <el-form-item label="版本说明">
+        <el-form-item label="调整说明" class="config-description">
           <el-input v-model="configDescription" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="configModalVisible = false">取消</el-button>
-        <el-button type="primary" :loading="configSaving" @click="submitConfigForm">保存并启用</el-button>
+        <el-button type="primary" :loading="configSaving" @click="submitConfigForm">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="termModalVisible"
+      :title="termModalType === 'add' ? '新增归一化词' : '编辑归一化词'"
+      width="640px"
+    >
+      <el-form :model="termForm" label-position="top">
+        <el-form-item label="标准词">
+          <el-input v-model="termForm.canonical_term" placeholder="请输入标准词" />
+        </el-form-item>
+        <el-form-item label="别名集合">
+          <el-select
+            v-model="termForm.aliases"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+            placeholder="输入别名后按回车添加"
+          />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch v-model="termForm.is_enabled" active-text="启用" inactive-text="停用" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="termForm.description" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="termModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="termSaving" @click="submitTermForm">保存</el-button>
       </template>
     </el-dialog>
 
@@ -580,7 +670,18 @@ import {
   getAdminConversationUsers,
   getAdminConversations
 } from '@/api/adminConversations'
-import { createConfigVersion, getDashboardConfig } from '@/api/adminConfig'
+import {
+  activateConfigVersion,
+  createConfigVersion,
+  createTermNormalization,
+  deleteTermNormalization,
+  getConfigVersions,
+  getDashboardConfig,
+  getKeywordRules,
+  getTermNormalizations,
+  updateKeywordRuleKeywords,
+  updateTermNormalization
+} from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
@@ -591,16 +692,75 @@ const dashboardLoading = ref(false)
 const dashboardConfig = ref({})
 const configModalVisible = ref(false)
 const configSaving = ref(false)
+const configVersionsLoading = ref(false)
+const configVersions = ref([])
 const configDescription = ref('')
+
+const paramMetas = [
+  { group: 'FAQ 快速检索', key: 'faq_exact_match_max_length', label: 'FAQ 精确匹配最大长度', description: 'FAQ 快速检索的问题最大字符长度', min: 1, step: 1 },
+  { group: 'FAQ 快速检索', key: 'faq_fast_retrieval_limit', label: 'FAQ 快速召回数量', description: 'FAQ 快速检索候选返回数量', min: 1, step: 1 },
+  { group: 'FAQ 快速检索', key: 'faq_fast_dense_weight', label: 'FAQ 快速稠密权重', description: 'FAQ 快速检索稠密检索权重', min: 0, max: 1, step: 0.01 },
+  { group: 'FAQ 快速检索', key: 'faq_fast_sparse_weight', label: 'FAQ 快速稀疏权重', description: 'FAQ 快速检索稀疏检索权重', min: 0, max: 1, step: 0.01 },
+  { group: '上下文与查询变体', key: 'follow_up_max_length', label: '追问判断最大长度', description: '追问判断的问题最大字符长度', min: 1, step: 1 },
+  { group: '上下文与查询变体', key: 'recent_message_keep_count', label: '最近消息保留条数', description: '不压缩、保留原文的最近消息条数', min: 0, step: 1 },
+  { group: '上下文与查询变体', key: 'history_summary_max_chars', label: '历史摘要字符上限', description: '历史消息摘要字符上限', min: 1, step: 1 },
+  { group: '上下文与查询变体', key: 'variant_generation_enabled', label: '启用查询变体生成', description: '是否启用查询变体生成', type: 'boolean' },
+  { group: '上下文与查询变体', key: 'llm_variant_count', label: 'LLM 变体数量', description: 'LLM 变体生成数量，可动态调整为 N', min: 0, step: 1 },
+  { group: 'FAQ 混合检索', key: 'faq_candidate_limit_per_query', label: 'FAQ 每 query 候选数量', description: 'FAQ 混合检索中每条 query 的候选返回数量', min: 1, step: 1 },
+  { group: 'FAQ 混合检索', key: 'faq_fusion_top_k', label: 'FAQ 融合保留数量', description: 'FAQ 多 query 候选合并、去重、融合后保留数量', min: 1, step: 1 },
+  { group: 'FAQ 混合检索', key: 'faq_dense_weight', label: 'FAQ 稠密权重', description: 'FAQ 稠密检索权重', min: 0, max: 1, step: 0.01 },
+  { group: 'FAQ 混合检索', key: 'faq_sparse_weight', label: 'FAQ 稀疏权重', description: 'FAQ 稀疏检索权重', min: 0, max: 1, step: 0.01 },
+  { group: 'FAQ 混合检索', key: 'faq_rerank_top_k', label: 'FAQ rerank 保留数量', description: 'FAQ rerank 后保留数量', min: 1, step: 1 },
+  { group: 'FAQ 混合检索', key: 'faq_high_conf_threshold', label: 'FAQ 高置信阈值', description: 'FAQ 高置信阈值', min: 0, max: 1, step: 0.01 },
+  { group: 'FAQ 混合检索', key: 'faq_middle_conf_threshold', label: 'FAQ 中置信阈值', description: 'FAQ 中置信阈值', min: 0, max: 1, step: 0.01 },
+  { group: '文档混合检索', key: 'doc_candidate_limit_per_query', label: '文档每 query 候选数量', description: '文档混合检索中每条 query 的候选返回数量', min: 1, step: 1 },
+  { group: '文档混合检索', key: 'doc_fusion_top_k', label: '文档融合保留数量', description: '文档多 query 候选合并、去重、融合后保留数量', min: 1, step: 1 },
+  { group: '文档混合检索', key: 'doc_dense_weight', label: '文档稠密权重', description: '文档稠密检索权重', min: 0, max: 1, step: 0.01 },
+  { group: '文档混合检索', key: 'doc_sparse_weight', label: '文档稀疏权重', description: '文档稀疏检索权重', min: 0, max: 1, step: 0.01 },
+  { group: '文档混合检索', key: 'doc_rerank_top_k', label: '文档 rerank 保留数量', description: '文档 rerank 后保留子块数量', min: 1, step: 1 },
+  { group: '文档混合检索', key: 'doc_evidence_threshold', label: '文档证据可用阈值', description: '文档证据可用阈值', min: 0, max: 1, step: 0.01 },
+  { group: '最终证据', key: 'final_evidence_top_k', label: '最终 evidence 数量', description: '最终交给 LLM 的 evidence 数量', min: 1, step: 1 }
+]
+
+const groupDescriptions = {
+  'FAQ 快速检索': '精确场景下先行召回 FAQ 候选，权重成对联动。',
+  上下文与查询变体: '控制追问识别、历史摘要和查询变体生成。',
+  'FAQ 混合检索': 'FAQ 多 query 召回、融合、重排和置信判断。',
+  文档混合检索: '文档候选召回、融合、重排和证据阈值。',
+  最终证据: '控制最终交给 LLM 的证据数量。'
+}
+
+const configParamGroups = computed(() => {
+  const groupMap = new Map()
+  paramMetas.forEach((item) => {
+    if (!groupMap.has(item.group)) {
+      groupMap.set(item.group, {
+        name: item.group,
+        description: groupDescriptions[item.group] || '',
+        items: []
+      })
+    }
+    groupMap.get(item.group).items.push(item)
+  })
+  return Array.from(groupMap.values())
+})
+
 const configForm = reactive({
-  model: '',
-  embedding_model: '',
-  rerank_model: '',
   variant_generation_enabled: true,
-  rerank_enabled: true,
-  faq_k: 20,
-  doc_k: 20,
-  rerank_top_k: 8,
+  llm_variant_count: 1,
+  faq_exact_match_max_length: 48,
+  faq_fast_retrieval_limit: 5,
+  faq_fast_dense_weight: 0.5,
+  faq_fast_sparse_weight: 0.5,
+  follow_up_max_length: 10,
+  recent_message_keep_count: 8,
+  history_summary_max_chars: 800,
+  faq_candidate_limit_per_query: 20,
+  faq_fusion_top_k: 20,
+  faq_rerank_top_k: 3,
+  doc_candidate_limit_per_query: 50,
+  doc_fusion_top_k: 20,
+  doc_rerank_top_k: 5,
   final_evidence_top_k: 6,
   faq_high_conf_threshold: 0.85,
   faq_middle_conf_threshold: 0.65,
@@ -612,6 +772,13 @@ const configForm = reactive({
 })
 
 const editableConfigKeys = Object.keys(configForm)
+const dashboardParamRows = computed(() => {
+  const values = dashboardConfig.value.hot_values || dashboardConfig.value.raw || {}
+  return paramMetas.map((item) => ({
+    ...item,
+    value: values[item.key] ?? '-'
+  }))
+})
 
 const fetchDashboardConfig = async () => {
   dashboardLoading.value = true
@@ -624,38 +791,92 @@ const fetchDashboardConfig = async () => {
   }
 }
 
+const fetchConfigVersions = async () => {
+  configVersionsLoading.value = true
+  try {
+    configVersions.value = await getConfigVersions()
+  } catch (error) {
+    ElMessage.error(error.message || '参数版本加载失败')
+  } finally {
+    configVersionsLoading.value = false
+  }
+}
+
 const openConfigModal = () => {
-  const raw = dashboardConfig.value.raw || {}
+  const raw = dashboardConfig.value.hot_values || dashboardConfig.value.raw || {}
   editableConfigKeys.forEach((key) => {
     if (raw[key] !== undefined) {
       configForm[key] = raw[key]
     }
   })
-  configDescription.value = `调整仪表台参数 ${new Date().toLocaleString()}`
+  configDescription.value = `新增检索热参数配置 ${new Date().toLocaleString()}`
   configModalVisible.value = true
 }
 
+const isWeightPairValid = (dense, sparse) => Math.abs(Number(dense) + Number(sparse) - 1) < 0.000001
+
+const weightPairs = {
+  faq_fast_dense_weight: 'faq_fast_sparse_weight',
+  faq_fast_sparse_weight: 'faq_fast_dense_weight',
+  faq_dense_weight: 'faq_sparse_weight',
+  faq_sparse_weight: 'faq_dense_weight',
+  doc_dense_weight: 'doc_sparse_weight',
+  doc_sparse_weight: 'doc_dense_weight'
+}
+
+const handleConfigFieldChange = (key) => {
+  const pairKey = weightPairs[key]
+  if (!pairKey) return
+  const value = Number(configForm[key])
+  if (Number.isNaN(value)) return
+  configForm[key] = Number(value.toFixed(2))
+  configForm[pairKey] = Number((1 - configForm[key]).toFixed(2))
+}
+
 const submitConfigForm = async () => {
-  const raw = dashboardConfig.value.raw || {}
+  const raw = dashboardConfig.value.hot_values || dashboardConfig.value.raw || {}
   const nextConfig = { ...raw }
   editableConfigKeys.forEach((key) => {
     nextConfig[key] = configForm[key]
   })
+
+  if (!isWeightPairValid(nextConfig.faq_fast_dense_weight, nextConfig.faq_fast_sparse_weight)) {
+    ElMessage.error('FAQ 快速 Dense 与 Sparse 权重之和必须等于 1')
+    return
+  }
+  if (!isWeightPairValid(nextConfig.faq_dense_weight, nextConfig.faq_sparse_weight)) {
+    ElMessage.error('FAQ Dense 与 Sparse 权重之和必须等于 1')
+    return
+  }
+  if (!isWeightPairValid(nextConfig.doc_dense_weight, nextConfig.doc_sparse_weight)) {
+    ElMessage.error('Doc Dense 与 Sparse 权重之和必须等于 1')
+    return
+  }
 
   configSaving.value = true
   try {
     await createConfigVersion({
       config: nextConfig,
       description: configDescription.value,
-      activate: true
+      activate: false
     })
-    ElMessage.success('参数已保存并启用')
+    ElMessage.success('参数配置已保存')
     configModalVisible.value = false
-    fetchDashboardConfig()
+    fetchConfigVersions()
   } catch (error) {
     ElMessage.error(error.message || '参数保存失败')
   } finally {
     configSaving.value = false
+  }
+}
+
+const activateConfig = async (versionId) => {
+  try {
+    await activateConfigVersion(versionId)
+    ElMessage.success('参数配置已启用')
+    await Promise.all([fetchDashboardConfig(), fetchConfigVersions()])
+  } catch (error) {
+    ElMessage.error(error.message || '参数启用失败')
   }
 }
 
@@ -711,7 +932,7 @@ const openUserModal = (type, row = null) => {
 }
 
 const buildUserPayload = () => ({
-  username: userForm.username,
+  ...(userModalType.value === 'add' ? { username: userForm.username } : {}),
   password: userForm.password || undefined,
   displayName: userForm.displayName,
   name: userForm.name || userForm.displayName,
@@ -722,6 +943,10 @@ const buildUserPayload = () => ({
 })
 
 const submitUserForm = async () => {
+  if (userModalType.value === 'add' && !/^[A-Za-z0-9]+$/.test(userForm.username)) {
+    ElMessage.error('账号只允许英文和数字')
+    return
+  }
   try {
     if (userModalType.value === 'add') {
       await createAdminUser(buildUserPayload())
@@ -1025,6 +1250,116 @@ const deleteHistoryConversation = (row) => {
     .catch(() => {})
 }
 
+const keywordRulesLoading = ref(false)
+const keywordRules = ref([])
+
+const fetchKeywordRules = async () => {
+  keywordRulesLoading.value = true
+  try {
+    const data = await getKeywordRules()
+    keywordRules.value = data.map((item) => ({
+      ...item,
+      editKeywords: [...(item.keywords || [])]
+    }))
+  } catch (error) {
+    ElMessage.error(error.message || '关键词规则加载失败')
+  } finally {
+    keywordRulesLoading.value = false
+  }
+}
+
+const saveKeywordRule = async (rule) => {
+  try {
+    const data = await updateKeywordRuleKeywords(rule.rule_code, rule.editKeywords)
+    Object.assign(rule, data, { editKeywords: [...(data.keywords || [])] })
+    ElMessage.success('关键词已保存')
+  } catch (error) {
+    ElMessage.error(error.message || '关键词保存失败')
+  }
+}
+
+const termLoading = ref(false)
+const termSaving = ref(false)
+const termModalVisible = ref(false)
+const termModalType = ref('add')
+const termNormalizations = ref([])
+const termForm = reactive({
+  id: '',
+  canonical_term: '',
+  aliases: [],
+  description: '',
+  is_enabled: true
+})
+
+const fetchTermNormalizations = async () => {
+  termLoading.value = true
+  try {
+    termNormalizations.value = await getTermNormalizations()
+  } catch (error) {
+    ElMessage.error(error.message || '归一化词加载失败')
+  } finally {
+    termLoading.value = false
+  }
+}
+
+const openTermModal = (type, row = null) => {
+  termModalType.value = type
+  if (type === 'edit' && row) {
+    Object.assign(termForm, {
+      id: row.id,
+      canonical_term: row.canonical_term,
+      aliases: [...(row.aliases || [])],
+      description: row.description || '',
+      is_enabled: row.is_enabled
+    })
+  } else {
+    Object.assign(termForm, {
+      id: '',
+      canonical_term: '',
+      aliases: [],
+      description: '',
+      is_enabled: true
+    })
+  }
+  termModalVisible.value = true
+}
+
+const buildTermPayload = () => ({
+  canonical_term: termForm.canonical_term,
+  aliases: termForm.aliases,
+  description: termForm.description,
+  is_enabled: termForm.is_enabled
+})
+
+const submitTermForm = async () => {
+  termSaving.value = true
+  try {
+    if (termModalType.value === 'add') {
+      await createTermNormalization(buildTermPayload())
+      ElMessage.success('归一化词已新增')
+    } else {
+      await updateTermNormalization(termForm.id, buildTermPayload())
+      ElMessage.success('归一化词已更新')
+    }
+    termModalVisible.value = false
+    fetchTermNormalizations()
+  } catch (error) {
+    ElMessage.error(error.message || '归一化词保存失败')
+  } finally {
+    termSaving.value = false
+  }
+}
+
+const removeTerm = (row) => {
+  ElMessageBox.confirm(`确定删除归一化词“${row.canonical_term}”吗？`, '删除归一化词', { type: 'warning' })
+    .then(async () => {
+      await deleteTermNormalization(row.id)
+      ElMessage.success('归一化词已删除')
+      fetchTermNormalizations()
+    })
+    .catch(() => {})
+}
+
 const kbQuery = reactive({ keyword: '', status: '' })
 const kbList = ref([])
 const kbUploadVisible = ref(false)
@@ -1141,9 +1476,12 @@ const deleteEval = (id) => {
 
 onMounted(() => {
   fetchDashboardConfig()
+  fetchConfigVersions()
   fetchUsers()
   fetchHistoryUsers()
   fetchConversationHistory()
+  fetchKeywordRules()
+  fetchTermNormalizations()
   fetchKBs()
   fetchEvals()
 })
@@ -1217,6 +1555,87 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.config-section {
+  padding: 16px;
+  background: #f7f9fc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.config-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #e7ebf2;
+}
+
+.config-section-title h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #1d2129;
+}
+
+.config-section-title span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.config-edit-table :deep(.el-input-number) {
+  width: 100%;
+}
+
+.config-edit-table :deep(.el-table__cell) {
+  vertical-align: middle;
+}
+
+.config-description {
+  margin-bottom: 0;
+}
+
+.keyword-rule-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.keyword-rule-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.keyword-rule-head,
+.panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.keyword-rule-head h3,
+.keyword-rule-head p {
+  margin: 0;
+}
+
+.keyword-rule-head p {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #86909c;
+}
+
+.term-alias {
+  margin: 0 6px 6px 0;
 }
 
 .history-panel {

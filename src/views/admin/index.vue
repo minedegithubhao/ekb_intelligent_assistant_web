@@ -652,16 +652,17 @@
           <el-input v-model="datasetQuery.keyword" placeholder="评估集名称 / ID" class="filter-item history-search-input" clearable />
           <el-select v-model="datasetQuery.type" placeholder="评估类型" class="filter-item" clearable>
             <el-option label="retrieval_eval" value="retrieval_eval" />
+            <el-option label="ingestion_quality" value="ingestion_quality" />
             <el-option label="mixed" value="mixed" />
           </el-select>
           <el-button type="primary" @click="fetchEvaluationDatasets">查询</el-button>
           <el-button type="primary" plain class="right-action" @click="createEvalDataset">新建评估集</el-button>
-          <el-button type="primary" plain @click="importEvalSamples()">导入样本</el-button>
         </div>
 
         <el-table :data="filteredEvaluationDatasets" style="width: 100%">
-          <el-table-column prop="datasetId" label="评估集ID" min-width="190" />
-          <el-table-column prop="name" label="评估集名称" min-width="220" />
+          <el-table-column prop="datasetId" label="评估集ID" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="name" label="评估集名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip />
           <el-table-column label="适用类型" width="150">
             <template #default="scope">
               <el-tag :type="scope.row.type === 'mixed' ? 'warning' : 'primary'" effect="plain">
@@ -681,12 +682,52 @@
         </el-table>
       </section>
 
+
+      <section v-if="evaluationTab === 'samples'" class="pane-card">
+        <div class="filter-wrapper">
+          <el-select v-model="sampleQuery.datasetId" placeholder="评估集" class="filter-item wide-select" clearable filterable>
+            <el-option
+              v-for="item in evaluationDatasets"
+              :key="item.datasetId"
+              :label="`${item.datasetId} ｜ ${item.name}`"
+              :value="item.datasetId"
+            />
+          </el-select>
+          <el-input v-model="sampleQuery.category" placeholder="分类" class="filter-item" clearable />
+          <el-input v-model="sampleQuery.keyword" placeholder="样本ID / 问题 / 评估集" class="filter-item history-search-input" clearable />
+          <el-button type="primary" @click="fetchAllEvaluationSamples">查询</el-button>
+          <el-button type="primary" plain class="right-action" @click="openSampleCreateDialog">新增样本</el-button>
+        </div>
+
+        <el-table :data="allEvaluationSamples" v-loading="sampleOverviewLoading" style="width: 100%">
+          <el-table-column prop="datasetId" label="评估集ID" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="datasetName" label="评估集名称" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="caseId" label="样本ID" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="question" label="问题" min-width="260" show-overflow-tooltip />
+          <el-table-column label="期望结果 JSON" min-width="260" show-overflow-tooltip>
+            <template #default="scope">
+              <code>{{ formatJson(scope.row.expectedJson) }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column prop="category" label="分类" width="130" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建时间" width="170" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="scope">
+              <el-button link type="danger" @click="deleteSingleEvalSample(scope.row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
       <section v-if="evaluationTab === 'ingestion'" class="evaluation-panel">
         <div class="pane-card">
           <div class="filter-wrapper">
-            <el-select v-model="ingestionForm.kbVersion" placeholder="知识库版本" class="filter-item">
-              <el-option label="kb_v1" value="kb_v1" />
-              <el-option label="kb_v2" value="kb_v2" />
+            <el-select v-model="ingestionForm.kbVersion" placeholder="知识库版本" class="filter-item wide-select" filterable :loading="kbVersionsLoading">
+              <el-option
+                v-for="item in kbVersionOptions"
+                :key="item.kbVersion"
+                :label="item.label"
+                :value="item.kbVersion"
+              />
             </el-select>
             <el-input v-model="ingestionForm.minLength" placeholder="最短 80 字" class="filter-item" />
             <el-input v-model="ingestionForm.maxLength" placeholder="最长 1800 字" class="filter-item" />
@@ -745,9 +786,13 @@
                   :value="item.datasetId"
                 />
               </el-select>
-              <el-select v-model="retrievalForm.kbVersion" placeholder="知识库版本" class="filter-item">
-                <el-option label="kb_v1" value="kb_v1" />
-                <el-option label="kb_v2" value="kb_v2" />
+              <el-select v-model="retrievalForm.kbVersion" placeholder="知识库版本" class="filter-item wide-select" filterable :loading="kbVersionsLoading">
+                <el-option
+                  v-for="item in kbVersionOptions"
+                  :key="item.kbVersion"
+                  :label="item.label"
+                  :value="item.kbVersion"
+                />
               </el-select>
               <el-input v-model="retrievalForm.faqTopK" placeholder="FAQ TopK 5" class="filter-item" />
               <el-input v-model="retrievalForm.kbTopK" placeholder="KB TopK 10" class="filter-item" />
@@ -783,6 +828,14 @@
         </template>
 
         <template v-else>
+          <div class="pane-card run-info-card">
+            <el-descriptions :column="4" border>
+              <el-descriptions-item label="评估集">{{ activeRetrievalDetail.datasetId }}</el-descriptions-item>
+              <el-descriptions-item label="知识库版本">{{ activeRetrievalDetail.kbVersion }}</el-descriptions-item>
+              <el-descriptions-item label="FAQ TopK">{{ activeRetrievalDetail.config?.faq_top_k ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="KB TopK">{{ activeRetrievalDetail.config?.kb_top_k ?? '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
           <el-button :icon="ArrowLeft" class="back-btn" @click="activeRetrievalDetail = null">返回列表</el-button>
           <div class="eval-metric-grid">
             <div class="metric-card">
@@ -841,8 +894,8 @@
         <div class="pane-card">
           <div class="filter-wrapper">
             <el-select v-model="recordQuery.type" placeholder="评估类型" class="filter-item" clearable>
-              <el-option label="检索评估" value="retrieval" />
-              <el-option label="入库质量" value="ingestion" />
+              <el-option label="检索评估" value="retrieval_eval" />
+              <el-option label="入库质量" value="ingestion_quality" />
             </el-select>
             <el-select v-model="recordQuery.status" placeholder="任务状态" class="filter-item" clearable>
               <el-option label="completed" value="completed" />
@@ -2866,11 +2919,14 @@ const getEvalTagType = (status) => {
 const evaluationTab = ref('datasets')
 const evaluationTabs = [
   { name: 'datasets', label: '评估集管理' },
+  { name: 'samples', label: '样本总览' },
   { name: 'ingestion', label: '入库质量评估' },
   { name: 'retrieval', label: '检索评估' },
   { name: 'records', label: '评估记录' }
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
+const sampleQuery = reactive({ datasetId: '', category: '', keyword: '' })
+const sampleOverviewLoading = ref(false)
 const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
 const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
@@ -2901,6 +2957,90 @@ const filteredEvaluationDatasets = computed(() => {
     return matchedKeyword && matchedType
   })
 })
+
+const evaluationSampleSeed = ref([
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    datasetName: '京东规则检索评估集',
+    caseId: 'eval_0001',
+    question: '个人/个体店出售假冒商品怎么处理？',
+    expectedJson: { expected_rule_id: '923540006109319168', hit_type: 'faq_or_doc' },
+    category: '违规治理',
+    createdAt: '2026-06-23 10:12'
+  },
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    datasetName: '京东规则检索评估集',
+    caseId: 'eval_0018',
+    question: 'SSD 固态硬盘最低质保多久？',
+    expectedJson: { expected_rule_id: '1076394019191394304', hit_type: 'doc' },
+    category: '质保服务',
+    createdAt: '2026-06-23 10:18'
+  },
+  {
+    datasetId: 'jd_rules_mixed_v1',
+    datasetName: '京东规则综合评估集',
+    caseId: 'eval_0031',
+    question: '宠物健康类目需要什么资质？',
+    expectedJson: { expected_rule_id: '880256294462820352', hit_type: 'doc' },
+    category: '类目资质',
+    createdAt: '2026-06-22 19:10'
+  }
+])
+const allEvaluationSamples = ref([])
+const kbVersionsLoading = computed(() => offlineLoading.value)
+const kbVersionOptions = computed(() => {
+  const versions = kbList.value.length
+    ? kbList.value.map((item) => ({
+        kbVersion: item.kb_version,
+        label: `${item.kb_version}${item.status ? ` · ${item.status}` : ''}`
+      }))
+    : [
+        { kbVersion: 'kb_v1', label: 'kb_v1' },
+        { kbVersion: 'kb_v2', label: 'kb_v2' }
+      ]
+  return versions
+})
+
+const filterEvaluationSamples = () => {
+  const keyword = sampleQuery.keyword.trim()
+  return evaluationSampleSeed.value.filter((item) => {
+    const matchedDataset = !sampleQuery.datasetId || item.datasetId === sampleQuery.datasetId
+    const matchedCategory = !sampleQuery.category || item.category.includes(sampleQuery.category)
+    const matchedKeyword =
+      !keyword ||
+      item.caseId.includes(keyword) ||
+      item.question.includes(keyword) ||
+      item.datasetId.includes(keyword) ||
+      item.datasetName.includes(keyword)
+    return matchedDataset && matchedCategory && matchedKeyword
+  })
+}
+
+const fetchAllEvaluationSamples = () => {
+  sampleOverviewLoading.value = true
+  allEvaluationSamples.value = filterEvaluationSamples()
+  sampleOverviewLoading.value = false
+}
+
+const formatJson = (value) => {
+  if (!value) return '-'
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const openSampleCreateDialog = () => {
+  ElMessage.info('新增样本接口待后端接入')
+}
+
+const deleteSingleEvalSample = (row) => {
+  evaluationSampleSeed.value = evaluationSampleSeed.value.filter((item) => item.caseId !== row.caseId)
+  fetchAllEvaluationSamples()
+  ElMessage.success('样本已从当前演示列表移除')
+}
 
 const ingestionMetrics = reactive({
   totalChunks: '12,000',
@@ -3053,6 +3193,7 @@ const fetchEvaluationDatasets = () => {
   ElMessage.success('评估集列表已刷新')
 }
 
+
 const createEvalDataset = () => {
   // TODO: open dataset creation dialog after backend contract is finalized.
   ElMessage.info('新建评估集接口待后端接入')
@@ -3123,6 +3264,7 @@ onMounted(() => {
   fetchTermNormalizations()
   fetchKnowledgeWorkbench()
   fetchEvaluationDatasets()
+  fetchAllEvaluationSamples()
   fetchEvaluationRecords()
 })
 
@@ -3823,6 +3965,81 @@ onBeforeUnmount(() => {
   color: #4e5969;
 }
 
+
+.sample-dialog-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.sample-dialog-toolbar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sample-dialog-toolbar strong {
+  color: #1d2129;
+}
+
+.sample-dialog-toolbar span {
+  color: #86909c;
+  overflow-wrap: anywhere;
+}
+
+.sample-dialog-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.sample-import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.sample-import-panel {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+}
+
+.sample-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sample-import-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #1d2129;
+}
+
+.single-sample-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.single-sample-form :deep(.el-form-item:nth-child(2)) {
+  grid-column: 1 / -1;
+}
+
+.sample-panel-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 @media (max-width: 1100px) {
   .history-toolbar {
     flex-direction: column;

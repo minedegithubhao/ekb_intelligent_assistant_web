@@ -2925,6 +2925,8 @@ const evaluationTabs = [
   { name: 'records', label: '评估记录' }
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
+const sampleQuery = reactive({ datasetId: '', category: '', keyword: '' })
+const sampleOverviewLoading = ref(false)
 const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
 const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
@@ -2955,6 +2957,90 @@ const filteredEvaluationDatasets = computed(() => {
     return matchedKeyword && matchedType
   })
 })
+
+const evaluationSampleSeed = ref([
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    datasetName: '京东规则检索评估集',
+    caseId: 'eval_0001',
+    question: '个人/个体店出售假冒商品怎么处理？',
+    expectedJson: { expected_rule_id: '923540006109319168', hit_type: 'faq_or_doc' },
+    category: '违规治理',
+    createdAt: '2026-06-23 10:12'
+  },
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    datasetName: '京东规则检索评估集',
+    caseId: 'eval_0018',
+    question: 'SSD 固态硬盘最低质保多久？',
+    expectedJson: { expected_rule_id: '1076394019191394304', hit_type: 'doc' },
+    category: '质保服务',
+    createdAt: '2026-06-23 10:18'
+  },
+  {
+    datasetId: 'jd_rules_mixed_v1',
+    datasetName: '京东规则综合评估集',
+    caseId: 'eval_0031',
+    question: '宠物健康类目需要什么资质？',
+    expectedJson: { expected_rule_id: '880256294462820352', hit_type: 'doc' },
+    category: '类目资质',
+    createdAt: '2026-06-22 19:10'
+  }
+])
+const allEvaluationSamples = ref([])
+const kbVersionsLoading = computed(() => offlineLoading.value)
+const kbVersionOptions = computed(() => {
+  const versions = kbList.value.length
+    ? kbList.value.map((item) => ({
+        kbVersion: item.kb_version,
+        label: `${item.kb_version}${item.status ? ` · ${item.status}` : ''}`
+      }))
+    : [
+        { kbVersion: 'kb_v1', label: 'kb_v1' },
+        { kbVersion: 'kb_v2', label: 'kb_v2' }
+      ]
+  return versions
+})
+
+const filterEvaluationSamples = () => {
+  const keyword = sampleQuery.keyword.trim()
+  return evaluationSampleSeed.value.filter((item) => {
+    const matchedDataset = !sampleQuery.datasetId || item.datasetId === sampleQuery.datasetId
+    const matchedCategory = !sampleQuery.category || item.category.includes(sampleQuery.category)
+    const matchedKeyword =
+      !keyword ||
+      item.caseId.includes(keyword) ||
+      item.question.includes(keyword) ||
+      item.datasetId.includes(keyword) ||
+      item.datasetName.includes(keyword)
+    return matchedDataset && matchedCategory && matchedKeyword
+  })
+}
+
+const fetchAllEvaluationSamples = () => {
+  sampleOverviewLoading.value = true
+  allEvaluationSamples.value = filterEvaluationSamples()
+  sampleOverviewLoading.value = false
+}
+
+const formatJson = (value) => {
+  if (!value) return '-'
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const openSampleCreateDialog = () => {
+  ElMessage.info('新增样本接口待后端接入')
+}
+
+const deleteSingleEvalSample = (row) => {
+  evaluationSampleSeed.value = evaluationSampleSeed.value.filter((item) => item.caseId !== row.caseId)
+  fetchAllEvaluationSamples()
+  ElMessage.success('样本已从当前演示列表移除')
+}
 
 const ingestionMetrics = reactive({
   totalChunks: '12,000',
@@ -3176,7 +3262,7 @@ onMounted(() => {
   fetchConversationHistory()
   fetchKeywordRules()
   fetchTermNormalizations()
-  fetchKBs()
+  fetchKnowledgeWorkbench()
   fetchEvaluationDatasets()
   fetchAllEvaluationSamples()
   fetchEvaluationRecords()

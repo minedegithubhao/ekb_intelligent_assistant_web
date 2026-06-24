@@ -318,52 +318,172 @@
       </el-table>
     </section>
 
-    <section v-if="currentTab === 'knowledge'" class="pane-card">
-      <div class="filter-wrapper">
-        <el-input v-model="kbQuery.keyword" placeholder="搜索知识库名称" class="filter-item search-input" clearable />
-        <el-select v-model="kbQuery.status" placeholder="知识库状态" class="filter-item" clearable>
-          <el-option label="已启用" value="enabled" />
-          <el-option label="已停用" value="disabled" />
-          <el-option label="正在处理" value="processing" />
-          <el-option label="处理失败" value="failed" />
-        </el-select>
-        <el-button type="primary" @click="fetchKBs">查询</el-button>
-        <el-button type="primary" plain class="right-action" @click="kbUploadVisible = true">上传知识库</el-button>
-        <el-button type="primary" plain @click="jsonImportVisible = true">JSON 入库</el-button>
+    <section v-if="currentTab === 'knowledge'" class="knowledge-panel">
+      <div class="pane-card">
+        <div class="dashboard-header">
+          <div>
+            <h2>文档入库仪表盘</h2>
+            <p>服务器目录：{{ activeOfflineConfig.source_data_root || '-' }} / {{ activeOfflineConfig.clean_markdown_dir || '-' }}</p>
+          </div>
+          <div class="dashboard-actions">
+            <el-button @click="fetchKnowledgeWorkbench">刷新</el-button>
+            <el-button type="primary" plain @click="openOfflineConfigModal">新增切分策略</el-button>
+            <el-button type="primary" @click="createKnowledgeVersion">创建知识库版本</el-button>
+            <el-button type="primary" plain @click="jsonImportVisible = true">JSON 入库</el-button>
+          </div>
+        </div>
+
+        <div class="param-grid" v-loading="offlineLoading">
+          <div class="param-card">
+            <span>当前版本</span>
+            <strong>{{ kbPointer.kb_active_version || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>上一版本</span>
+            <strong>{{ kbPointer.kb_previous_version || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>Parent Chunk</span>
+            <strong>{{ activeOfflineConfig.doc_parent_chunk_size || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>Child Chunk</span>
+            <strong>{{ activeOfflineConfig.doc_child_chunk_size || '-' }}</strong>
+          </div>
+          <div class="param-card">
+            <span>Overlap</span>
+            <strong>{{ activeOfflineConfig.doc_child_chunk_overlap ?? '-' }}</strong>
+          </div>
+        </div>
       </div>
 
-      <el-table :data="kbList" style="width: 100%">
-        <el-table-column prop="knowledgeBaseId" label="知识库ID" width="130" />
-        <el-table-column prop="name" label="名称" width="180" />
-        <el-table-column prop="description" label="描述" show-overflow-tooltip />
-        <el-table-column prop="documentCount" label="文件数" width="100" align="center" />
-        <el-table-column prop="status" label="状态" width="120">
-          <template #default="scope">
-            <el-tag :type="getKbTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="scope">
-            <el-button
-              v-if="scope.row.status === 'disabled'"
-              link
-              type="primary"
-              @click="updateKbStatus(scope.row.knowledgeBaseId, 'enabled')"
-            >
-              启用
-            </el-button>
-            <el-button
-              v-if="scope.row.status === 'enabled'"
-              link
-              type="warning"
-              @click="updateKbStatus(scope.row.knowledgeBaseId, 'disabled')"
-            >
-              停用
-            </el-button>
-            <el-button link type="danger" @click="deleteKB(scope.row.knowledgeBaseId)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="pane-card">
+        <div class="empty-state">
+          <h3>版本化入库</h3>
+          <p>先创建 staged 知识库版本，再在版本列表中点击“入库”上传本地 Markdown 或 FAQ CSV 目录。</p>
+        </div>
+        <div v-if="activeOfflineTask.task_id" class="json-import-progress">
+          <div class="json-import-progress-head">
+            <span>{{ activeOfflineTask.current_stage || activeOfflineTask.status }}</span>
+            <span>{{ activeOfflineTask.progress_percent || 0 }}%</span>
+          </div>
+          <el-progress :percentage="Number(activeOfflineTask.progress_percent || 0)" :stroke-width="10" />
+          <div class="json-import-current">
+            任务：{{ activeOfflineTask.task_id }}；类型：{{ formatIngestType(activeOfflineTask.ingest_type) }}；版本：{{ activeOfflineTask.kb_version || '-' }}
+          </div>
+        </div>
+      </div>
+
+      <div class="pane-card">
+        <h3>切分策略配置</h3>
+        <el-table :data="offlineConfigs" v-loading="offlineLoading" style="width: 100%">
+          <el-table-column prop="id" label="配置ID" width="90" />
+          <el-table-column label="状态" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.is_enabled ? 'success' : 'info'" size="small">
+                {{ scope.row.is_enabled ? '启用中' : '未启用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="doc_parent_chunk_size" label="Parent" width="100" />
+          <el-table-column prop="doc_child_chunk_size" label="Child" width="100" />
+          <el-table-column prop="doc_child_chunk_overlap" label="Overlap" width="100" />
+          <el-table-column prop="table_split_strategy" label="表格策略" width="110" />
+          <el-table-column prop="table_row_max_chars" label="表格行上限" width="120" />
+          <el-table-column prop="doc_collection_name" label="Doc Collection" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="faq_collection_name" label="FAQ Collection" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="updated_at" label="更新时间" width="180" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" :disabled="scope.row.is_enabled" @click="activateOfflineConfig(scope.row.id)">
+                启用
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="pane-card">
+        <h3>知识库版本</h3>
+        <el-table :data="kbList" v-loading="offlineLoading" style="width: 100%">
+          <el-table-column prop="kb_version" label="版本号" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="type" label="状态" width="110">
+            <template #default="scope">
+              <el-tag :type="getKbTagType(scope.row.type)" size="small">{{ scope.row.type }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="embedding_model" label="Embedding" width="130" />
+          <el-table-column label="Doc状态" width="110">
+            <template #default="scope">
+              <el-tag :type="scope.row.doc_ready ? 'success' : 'info'" size="small">
+                {{ scope.row.doc_ready ? '已准备' : '未准备' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="FAQ状态" width="110">
+            <template #default="scope">
+              <el-tag :type="scope.row.faq_ready ? 'success' : 'info'" size="small">
+                {{ scope.row.faq_ready ? '已准备' : '未准备' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="document_count" label="文档" width="80" align="center" />
+          <el-table-column prop="child_chunk_count" label="Child" width="90" align="center" />
+          <el-table-column prop="faq_count" label="FAQ" width="80" align="center" />
+          <el-table-column prop="doc_collection_name" label="Doc Collection" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="faq_collection_name" label="FAQ Collection" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="created_at" label="创建时间" width="180" />
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="scope">
+              <el-button v-if="scope.row.type === 'staged'" link type="primary" @click="openVersionIngestion(scope.row)">
+                入库
+              </el-button>
+              <el-button
+                v-if="scope.row.type === 'staged'"
+                link
+                type="primary"
+                :disabled="!isKbVersionReady(scope.row)"
+                @click="publishVersion(scope.row)"
+              >
+                发布
+              </el-button>
+              <el-button v-if="scope.row.type === 'archived'" link type="warning" @click="rollbackVersion(scope.row)">
+                回滚
+              </el-button>
+              <span v-if="scope.row.type === 'active'">当前</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="pane-card">
+        <h3>最近入库任务</h3>
+        <el-table :data="offlineTasks" v-loading="offlineTaskLoading" style="width: 100%">
+          <el-table-column prop="task_id" label="任务ID" min-width="210" show-overflow-tooltip />
+          <el-table-column label="类型" width="100">
+            <template #default="scope">
+              <el-tag effect="plain">{{ formatIngestType(scope.row.ingest_type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="110">
+            <template #default="scope">
+              <el-tag :type="getOfflineTaskTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="进度" width="180">
+            <template #default="scope">
+              <el-progress :percentage="Number(scope.row.progress_percent || 0)" :stroke-width="8" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="current_stage" label="阶段" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="kb_version" label="版本" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="document_count" label="文档" width="80" align="center" />
+          <el-table-column prop="child_chunk_count" label="Child" width="90" align="center" />
+          <el-table-column prop="faq_count" label="FAQ" width="80" align="center" />
+          <el-table-column prop="error_message" label="失败原因" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="created_at" label="创建时间" width="180" />
+        </el-table>
+      </div>
     </section>
 
     <section v-if="currentTab === 'evaluations'" class="evaluation-workbench">
@@ -578,7 +698,7 @@
               <el-option label="入库质量" value="ingestion" />
             </el-select>
             <el-select v-model="recordQuery.status" placeholder="任务状态" class="filter-item" clearable>
-              <el-option label="success" value="success" />
+              <el-option label="completed" value="completed" />
               <el-option label="running" value="running" />
               <el-option label="failed" value="failed" />
             </el-select>
@@ -590,7 +710,7 @@
             <el-table-column prop="taskId" label="任务ID" min-width="170" />
             <el-table-column label="评估类型" width="120">
               <template #default="scope">
-                <el-tag :type="scope.row.type === 'retrieval_eval' ? 'primary' : 'warning'" effect="plain">
+                <el-tag :type="scope.row.type === 'retrieval' ? 'primary' : 'warning'" effect="plain">
                   {{ scope.row.typeName }}
                 </el-tag>
               </template>
@@ -794,55 +914,206 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="kbUploadVisible" title="创建并导入知识库" width="540px">
-      <el-form :model="kbForm" label-position="top">
-        <el-form-item label="知识库名称" required>
-          <el-input v-model="kbForm.name" placeholder="请输入知识库名称" />
-        </el-form-item>
-        <el-form-item label="入库方式" required>
-          <el-select v-model="kbForm.ingestionType" placeholder="请选择入库方式" style="width: 100%">
-            <el-option label="FAQ 入库" value="faq" />
-            <el-option label="文档入库" value="document" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="业务描述">
-          <el-input v-model="kbForm.description" type="textarea" placeholder="说明该知识库的知识覆盖范围" />
-        </el-form-item>
-        <el-form-item label="文件上传">
-          <el-upload
-            v-model:file-list="kbUploadFiles"
-            class="upload-drag"
-            drag
-            action="#"
-            :auto-upload="false"
-            :accept="kbForm.ingestionType === 'document' ? '.csv,.md' : undefined"
-            :on-change="handleKbFileChange"
-            :on-remove="handleKbFileRemove"
-          >
-            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">将文件拖到此处，或 <em>点击上传</em></div>
-            <template #tip>
-              <div class="el-upload__tip">
-                文档入库当前仅支持 CSV 和 Markdown(.md) 文件。
-              </div>
-            </template>
-          </el-upload>
-        </el-form-item>
+    <el-dialog v-model="offlineConfigModalVisible" title="新增切分策略配置" width="760px">
+      <el-form :model="offlineConfigForm" label-position="top" class="config-form">
         <div class="two-column">
-          <el-form-item label="文本切分长度">
-            <el-input-number v-model="kbForm.chunkSize" :min="100" :step="50" />
+          <el-form-item label="Parent Chunk 最大字符数" required>
+            <el-input-number v-model="offlineConfigForm.doc_parent_chunk_size" :min="1" :step="100" />
           </el-form-item>
-          <el-form-item label="重叠长度">
-            <el-input-number v-model="kbForm.chunkOverlap" :min="0" :step="10" />
+          <el-form-item label="Child Chunk 最大字符数" required>
+            <el-input-number v-model="offlineConfigForm.doc_child_chunk_size" :min="1" :step="50" />
           </el-form-item>
         </div>
-        <el-form-item>
-          <el-checkbox v-model="kbForm.autoEnable">处理完成后自动启用</el-checkbox>
-        </el-form-item>
+        <div class="two-column">
+          <el-form-item label="Child Chunk 重叠字符数" required>
+            <el-input-number v-model="offlineConfigForm.doc_child_chunk_overlap" :min="0" :step="10" />
+          </el-form-item>
+          <el-form-item label="表格行最大字符数" required>
+            <el-input-number v-model="offlineConfigForm.table_row_max_chars" :min="1" :step="100" />
+          </el-form-item>
+        </div>
+        <div class="two-column">
+          <el-form-item label="表格切分策略">
+            <el-select v-model="offlineConfigForm.table_split_strategy" style="width: 100%">
+              <el-option label="按行切分(row)" value="row" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="表格是否要求表头">
+            <el-switch v-model="offlineConfigForm.table_header_required" active-text="是" inactive-text="否" />
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
-        <el-button @click="kbUploadVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitKbUpload">开始导入</el-button>
+        <el-button @click="offlineConfigModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="offlineConfigSaving" @click="submitOfflineConfig">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="kbUploadVisible" title="版本入库" width="900px" :close-on-click-modal="false">
+      <el-descriptions :column="3" border class="offline-source-desc">
+        <el-descriptions-item label="版本号">{{ selectedKbVersion?.kb_version || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="Doc状态">
+          {{ selectedKbVersion?.doc_ready ? '已准备' : '未准备' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="FAQ状态">
+          {{ selectedKbVersion?.faq_ready ? '已准备' : '未准备' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Doc Collection">{{ selectedKbVersion?.doc_collection_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="FAQ Collection">{{ selectedKbVersion?.faq_collection_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="说明">{{ selectedKbVersion?.description || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-tabs v-model="knowledgeIngestionTab" class="offline-ingest-form">
+        <el-tab-pane label="文档入库" name="document">
+          <el-form :model="documentUploadForm" label-position="top" class="local-ingest-form">
+            <div class="three-column">
+              <el-form-item label="知识库类型" required>
+                <el-select v-model="documentUploadForm.scope" style="width: 100%">
+                  <el-option
+                    v-for="item in scopeOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="文件数量">
+                <el-tag effect="plain">{{ documentUploadFiles.length }} 个 Markdown 文件</el-tag>
+              </el-form-item>
+            </div>
+            <el-form-item label="本地 Markdown 目录" required>
+              <div class="local-folder-row">
+                <input
+                  ref="documentFolderInputRef"
+                  class="hidden-file-input"
+                  type="file"
+                  accept=".md"
+                  webkitdirectory
+                  directory
+                  multiple
+                  @change="handleDocumentFolderChange"
+                />
+                <el-button type="primary" plain @click="chooseLocalFolder('document')">选择本地目录</el-button>
+                <span>{{ formatSelectedFolder(documentUploadFiles) }}</span>
+              </div>
+            </el-form-item>
+            <el-form-item label="入库说明">
+              <el-input
+                v-model="documentUploadForm.description"
+                type="textarea"
+                :rows="3"
+                placeholder="说明本次文档局部更新范围"
+              />
+            </el-form-item>
+            <div class="local-ingest-actions">
+              <el-button
+                type="primary"
+                :loading="documentUploadSubmitting"
+                :disabled="!documentUploadFiles.length"
+                @click="submitDocumentUpload"
+              >
+                开始文档入库
+              </el-button>
+            </div>
+          </el-form>
+        </el-tab-pane>
+        <el-tab-pane label="FAQ 入库" name="faq">
+          <el-form :model="faqUploadForm" label-position="top" class="local-ingest-form">
+            <div class="three-column">
+              <el-form-item label="知识库类型" required>
+                <el-select v-model="faqUploadForm.scope" style="width: 100%">
+                  <el-option
+                    v-for="item in scopeOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="文件数量">
+                <el-tag effect="plain">{{ faqUploadFiles.length }} 个 CSV 文件</el-tag>
+              </el-form-item>
+            </div>
+            <el-form-item label="本地 FAQ CSV 目录" required>
+              <div class="local-folder-row">
+                <input
+                  ref="faqFolderInputRef"
+                  class="hidden-file-input"
+                  type="file"
+                  accept=".csv"
+                  webkitdirectory
+                  directory
+                  multiple
+                  @change="handleFaqFolderChange"
+                />
+                <el-button type="primary" plain @click="chooseLocalFolder('faq')">选择本地目录</el-button>
+                <span>{{ formatSelectedFolder(faqUploadFiles) }}</span>
+              </div>
+            </el-form-item>
+            <el-form-item label="入库说明">
+              <el-input
+                v-model="faqUploadForm.description"
+                type="textarea"
+                :rows="3"
+                placeholder="说明本次 FAQ 局部更新范围"
+              />
+            </el-form-item>
+            <div class="local-ingest-actions">
+              <el-button
+                type="primary"
+                :loading="faqUploadSubmitting"
+                :disabled="!faqUploadFiles.length"
+                @click="submitFaqUpload"
+              >
+                开始 FAQ 入库
+              </el-button>
+            </div>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
+      <div v-if="activeOfflineTask.task_id" class="json-import-progress">
+        <div class="json-import-progress-head">
+          <span>{{ activeOfflineTask.current_stage || activeOfflineTask.status }}</span>
+          <span>{{ activeOfflineTask.progress_percent || 0 }}%</span>
+        </div>
+        <el-progress :percentage="Number(activeOfflineTask.progress_percent || 0)" :stroke-width="10" />
+        <div class="json-import-current">
+          任务：{{ activeOfflineTask.task_id }}；版本：{{ activeOfflineTask.kb_version || '-' }}
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="kbUploadVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="directoryPickerVisible" title="选择服务器目录" width="760px" :close-on-click-modal="false">
+      <div class="directory-picker-toolbar">
+        <el-button :disabled="!directoryPickerState.parentPath" @click="loadServerDirectory(directoryPickerState.parentPath)">
+          上一级
+        </el-button>
+        <el-button @click="loadServerDirectory('')">磁盘根目录</el-button>
+        <span class="directory-current-path">{{ directoryPickerState.currentPath || '请选择一个服务器目录' }}</span>
+      </div>
+      <el-table
+        :data="directoryPickerState.directories"
+        v-loading="directoryPickerLoading"
+        height="360"
+        style="width: 100%"
+        @row-dblclick="enterServerDirectory"
+      >
+        <el-table-column prop="name" label="目录名" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="path" label="完整路径" min-width="360" show-overflow-tooltip />
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="scope">
+            <el-button link type="primary" @click="enterServerDirectory(scope.row)">进入</el-button>
+            <el-button link type="success" @click="selectServerDirectory(scope.row.path)">选择</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="directoryPickerVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!directoryPickerState.currentPath" @click="selectServerDirectory(directoryPickerState.currentPath)">
+          选择当前目录
+        </el-button>
       </template>
     </el-dialog>
 
@@ -956,7 +1227,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, UploadFilled } from '@element-plus/icons-vue'
 import {
@@ -978,17 +1249,19 @@ import {
   updateTermNormalization
 } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
+import { createKbVersion, getKbVersionPointer, getKbVersions, publishKbVersion, rollbackKbVersion } from '@/api/kbVersions'
 import {
-  createEvaluationDataset,
-  createIngestionQualityRun,
-  createRetrievalRun,
-  deleteEvaluationDataset,
-  getEvaluationCases,
-  getEvaluationDatasets,
-  getEvaluationRunCases,
-  getEvaluationRuns,
-  importEvaluationCases
-} from '@/api/adminEvaluation'
+  activateOfflineIngestionConfig,
+  createDocumentUploadTask,
+  createFaqUploadTask,
+  createOfflineIngestionConfig,
+  createOfflineIngestionTask,
+  getActiveOfflineIngestionConfig,
+  getOfflineIngestionConfigs,
+  getOfflineIngestionTask,
+  getOfflineIngestionTasks,
+  getServerDirectories
+} from '@/api/offlineIngestion'
 import { importJsonVectors } from '@/api/vectorIngestJson'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
@@ -1674,9 +1947,35 @@ const removeTerm = (row) => {
     .catch(() => {})
 }
 
-const kbQuery = reactive({ keyword: '', status: '' })
 const kbList = ref([])
 const kbUploadVisible = ref(false)
+const selectedKbVersion = ref(null)
+const offlineConfigModalVisible = ref(false)
+const offlineConfigSaving = ref(false)
+const offlineLoading = ref(false)
+const offlineTaskLoading = ref(false)
+const offlineTaskSubmitting = ref(false)
+const offlineConfigs = ref([])
+const offlineTasks = ref([])
+const activeOfflineConfig = ref({})
+const activeOfflineTask = ref({})
+const kbPointer = ref({})
+const offlineTaskPollTimers = new Map()
+const knowledgeIngestionTab = ref('document')
+const documentFolderInputRef = ref(null)
+const faqFolderInputRef = ref(null)
+const documentUploadFiles = ref([])
+const faqUploadFiles = ref([])
+const documentUploadSubmitting = ref(false)
+const faqUploadSubmitting = ref(false)
+const directoryPickerVisible = ref(false)
+const directoryPickerLoading = ref(false)
+const directoryPickerTarget = ref('source')
+const directoryPickerState = reactive({
+  currentPath: '',
+  parentPath: null,
+  directories: []
+})
 const jsonImportVisible = ref(false)
 const jsonImportLoading = ref(false)
 const jsonImportResult = ref(null)
@@ -1688,50 +1987,411 @@ const jsonImportProgress = reactive({
   currentFile: '',
   hasError: false
 })
-const kbUploadFiles = ref([])
 const jsonImportFiles = ref([])
 const kbForm = reactive({
-  name: '',
-  ingestionType: 'document',
   description: '',
-  chunkSize: 500,
-  chunkOverlap: 50,
-  autoEnable: true
+  autoEnable: true,
+  sourceConfigId: null,
+  source_data_root: '',
+  clean_markdown_dir: '',
+  index_csv_name: '',
+  faq_csv_dir: ''
+})
+const documentUploadForm = reactive({
+  scope: 'enterprise',
+  description: '',
+  autoPublish: false
+})
+const faqUploadForm = reactive({
+  scope: 'enterprise',
+  description: '',
+  autoPublish: false
+})
+const offlineConfigForm = reactive({
+  doc_parent_chunk_size: 1200,
+  doc_child_chunk_size: 400,
+  doc_child_chunk_overlap: 80,
+  table_split_strategy: 'row',
+  table_header_required: true,
+  table_row_max_chars: 1000
 })
 const jsonImportForm = reactive({
   recordType: 'faq'
 })
-const supportedDocumentExtensions = ['csv', 'md']
 
-const fetchKBs = () => {
-  kbList.value = [
-    {
-      knowledgeBaseId: 'kb_10001',
-      name: '项目知识库',
-      description: '用于 RAG 问答的项目内部资料资源',
-      status: 'enabled',
-      documentCount: 12,
-      createdAt: '2026-06-21 12:00:00'
-    },
-    {
-      knowledgeBaseId: 'kb_10002',
-      name: '产品 FAQ 技术库',
-      description: '面向售后客服的知识切片库',
-      status: 'processing',
-      documentCount: 1,
-      createdAt: '2026-06-21 15:30:00'
+const offlineSourceOptions = computed(() =>
+  offlineConfigs.value.map((item) => ({
+    id: item.id,
+    label: `${item.is_enabled ? '当前启用 · ' : ''}${item.source_data_root}/${item.clean_markdown_dir}`,
+    source_data_root: item.source_data_root,
+    clean_markdown_dir: item.clean_markdown_dir,
+    index_csv_name: item.index_csv_name,
+    faq_csv_dir: item.faq_csv_dir
+  }))
+)
+
+const scopeOptions = computed(() => {
+  const scopes = activeOfflineConfig.value.scope_enum || {
+    enterprise: '企业',
+    personal_individual: '个人/个体'
+  }
+  return Object.entries(scopes).map(([value, label]) => ({ value, label }))
+})
+
+const fetchKnowledgeWorkbench = async () => {
+  offlineLoading.value = true
+  offlineTaskLoading.value = true
+  try {
+    const [configs, activeConfig, versions, pointer, tasks] = await Promise.all([
+      getOfflineIngestionConfigs(),
+      getActiveOfflineIngestionConfig(),
+      getKbVersions(),
+      getKbVersionPointer(),
+      getOfflineIngestionTasks()
+    ])
+    offlineConfigs.value = configs || []
+    activeOfflineConfig.value = activeConfig || {}
+    kbList.value = versions?.items || []
+    if (selectedKbVersion.value) {
+      selectedKbVersion.value =
+        kbList.value.find((item) => item.kb_version === selectedKbVersion.value.kb_version) || selectedKbVersion.value
     }
-  ]
+    kbPointer.value = pointer || {}
+    offlineTasks.value = tasks || []
+  } catch (error) {
+    ElMessage.error(error.message || '知识库入库信息加载失败')
+  } finally {
+    offlineLoading.value = false
+    offlineTaskLoading.value = false
+  }
 }
 
 const getKbTagType = (status) => {
-  const maps = { enabled: 'success', disabled: 'info', processing: 'primary', failed: 'danger' }
+  const maps = { active: 'success', staged: 'primary', archived: 'info', failed: 'danger' }
   return maps[status] || 'info'
 }
 
-const updateKbStatus = (id, targetStatus) => {
-  ElMessage.success(`知识库 ${id} 状态已变更为 ${targetStatus}`)
-  fetchKBs()
+const isKbVersionReady = (row) => Boolean(row?.doc_ready && row?.faq_ready)
+
+const getKbVersionMissingText = (row) => {
+  const missing = []
+  if (!row?.doc_ready) missing.push('Doc')
+  if (!row?.faq_ready) missing.push('FAQ')
+  return missing.join('、')
+}
+
+const createKnowledgeVersion = async () => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入版本说明，可留空。', '创建知识库版本', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '例如：本次更新企业规则文档和 FAQ'
+    })
+    const version = await createKbVersion({
+      description: value || null,
+      doc_collection_name: activeOfflineConfig.value.doc_collection_name || 'doc_collection',
+      faq_collection_name: activeOfflineConfig.value.faq_collection_name || 'faq_collection'
+    })
+    ElMessage.success('知识库版本已创建')
+    await fetchKnowledgeWorkbench()
+    openVersionIngestion(version)
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error.message || '知识库版本创建失败')
+  }
+}
+
+const openVersionIngestion = (row) => {
+  if (!row || row.type !== 'staged') {
+    ElMessage.warning('只能向 staged 版本入库')
+    return
+  }
+  selectedKbVersion.value = row
+  activeOfflineTask.value = {}
+  documentUploadFiles.value = []
+  faqUploadFiles.value = []
+  Object.assign(documentUploadForm, { scope: 'enterprise', description: '', autoPublish: false })
+  Object.assign(faqUploadForm, { scope: 'enterprise', description: '', autoPublish: false })
+  kbUploadVisible.value = true
+}
+
+const getOfflineTaskTagType = (status) => {
+  const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
+  return maps[status] || 'info'
+}
+
+const formatIngestType = (type) => {
+  const maps = { document: '文档', faq: 'FAQ', mixed: '混合' }
+  return maps[type] || '-'
+}
+
+const chooseLocalFolder = (type) => {
+  if (type === 'faq') {
+    faqFolderInputRef.value?.click()
+    return
+  }
+  documentFolderInputRef.value?.click()
+}
+
+const filterLocalFiles = (fileList, suffix) =>
+  Array.from(fileList || []).filter((file) => file.name.toLowerCase().endsWith(suffix))
+
+const handleDocumentFolderChange = (event) => {
+  documentUploadFiles.value = filterLocalFiles(event.target.files, '.md')
+  if (!documentUploadFiles.value.length) {
+    ElMessage.warning('选择的目录中没有 Markdown 文件')
+  }
+  event.target.value = ''
+}
+
+const handleFaqFolderChange = (event) => {
+  faqUploadFiles.value = filterLocalFiles(event.target.files, '.csv')
+  if (!faqUploadFiles.value.length) {
+    ElMessage.warning('选择的目录中没有 CSV 文件')
+  }
+  event.target.value = ''
+}
+
+const formatSelectedFolder = (files) => {
+  if (!files.length) return '尚未选择目录'
+  const firstPath = files[0].webkitRelativePath || files[0].name
+  const folder = firstPath.includes('/') ? firstPath.split('/')[0] : '已选择目录'
+  return `${folder}，${files.length} 个文件`
+}
+
+const buildUploadFormData = (files, form) => {
+  const formData = new FormData()
+  formData.append('kb_version', selectedKbVersion.value?.kb_version || '')
+  formData.append('scope', form.scope)
+  formData.append('version_description', form.description || '')
+  formData.append('auto_publish', 'false')
+  files.forEach((file) => {
+    formData.append('files', file, file.webkitRelativePath || file.name)
+  })
+  return formData
+}
+
+const afterUploadTaskCreated = async (result, successMessage) => {
+  ElMessage.success(successMessage)
+  activeOfflineTask.value = {
+    task_id: result.task_id,
+    status: result.status,
+    ingest_type: result.ingest_type,
+    kb_version: result.kb_version || selectedKbVersion.value?.kb_version,
+    progress_percent: 0,
+    current_stage: '等待执行'
+  }
+  await fetchKnowledgeWorkbench()
+  pollOfflineTask(result.task_id)
+}
+
+const submitDocumentUpload = async () => {
+  if (!selectedKbVersion.value?.kb_version) {
+    ElMessage.error('请先选择 staged 知识库版本')
+    return
+  }
+  if (!documentUploadFiles.value.length) {
+    ElMessage.error('请先选择包含 Markdown 文件的本地目录')
+    return
+  }
+  documentUploadSubmitting.value = true
+  try {
+    const result = await createDocumentUploadTask(buildUploadFormData(documentUploadFiles.value, documentUploadForm))
+    documentUploadFiles.value = []
+    await afterUploadTaskCreated(result, '文档入库任务已提交')
+  } catch (error) {
+    ElMessage.error(error.message || '文档入库任务提交失败')
+  } finally {
+    documentUploadSubmitting.value = false
+  }
+}
+
+const submitFaqUpload = async () => {
+  if (!selectedKbVersion.value?.kb_version) {
+    ElMessage.error('请先选择 staged 知识库版本')
+    return
+  }
+  if (!faqUploadFiles.value.length) {
+    ElMessage.error('请先选择包含 FAQ CSV 文件的本地目录')
+    return
+  }
+  faqUploadSubmitting.value = true
+  try {
+    const result = await createFaqUploadTask(buildUploadFormData(faqUploadFiles.value, faqUploadForm))
+    faqUploadFiles.value = []
+    await afterUploadTaskCreated(result, 'FAQ 入库任务已提交')
+  } catch (error) {
+    ElMessage.error(error.message || 'FAQ 入库任务提交失败')
+  } finally {
+    faqUploadSubmitting.value = false
+  }
+}
+
+const openOfflineConfigModal = () => {
+  const base = activeOfflineConfig.value || {}
+  Object.assign(offlineConfigForm, {
+    doc_parent_chunk_size: Number(base.doc_parent_chunk_size || 1200),
+    doc_child_chunk_size: Number(base.doc_child_chunk_size || 400),
+    doc_child_chunk_overlap: Number(base.doc_child_chunk_overlap || 80),
+    table_split_strategy: base.table_split_strategy || 'row',
+    table_header_required: base.table_header_required ?? true,
+    table_row_max_chars: Number(base.table_row_max_chars || 1000)
+  })
+  offlineConfigModalVisible.value = true
+}
+
+const validateOfflineConfigForm = () => {
+  if (offlineConfigForm.doc_child_chunk_overlap >= offlineConfigForm.doc_child_chunk_size) {
+    ElMessage.error('Child Chunk 重叠字符数必须小于 Child Chunk 最大字符数')
+    return false
+  }
+  if (offlineConfigForm.table_split_strategy !== 'row') {
+    ElMessage.error('第一版表格切分策略只支持 row')
+    return false
+  }
+  return true
+}
+
+const submitOfflineConfig = async () => {
+  if (!validateOfflineConfigForm()) return
+  offlineConfigSaving.value = true
+  try {
+    await createOfflineIngestionConfig({ ...offlineConfigForm })
+    ElMessage.success('切分策略配置已保存')
+    offlineConfigModalVisible.value = false
+    fetchKnowledgeWorkbench()
+  } catch (error) {
+    ElMessage.error(error.message || '切分策略配置保存失败')
+  } finally {
+    offlineConfigSaving.value = false
+  }
+}
+
+const activateOfflineConfig = async (configId) => {
+  try {
+    await activateOfflineIngestionConfig(configId)
+    ElMessage.success('切分策略已启用')
+    fetchKnowledgeWorkbench()
+  } catch (error) {
+    ElMessage.error(error.message || '切分策略启用失败')
+  }
+}
+
+const publishVersion = (row) => {
+  if (!isKbVersionReady(row)) {
+    ElMessage.warning(`版本内容未完整，缺少：${getKbVersionMissingText(row)}`)
+    return
+  }
+  ElMessageBox.confirm(`确定发布版本 ${row.kb_version} 吗？发布后将成为当前线上知识库版本。`, '发布知识库版本', {
+    type: 'warning'
+  })
+    .then(async () => {
+      await publishKbVersion(row.kb_version, 'publish from admin knowledge page')
+      ElMessage.success('知识库版本已发布')
+      fetchKnowledgeWorkbench()
+    })
+    .catch(() => {})
+}
+
+const rollbackVersion = (row) => {
+  ElMessageBox.confirm(`确定回滚到版本 ${row.kb_version} 吗？当前 active 版本会归档。`, '回滚知识库版本', {
+    type: 'warning'
+  })
+    .then(async () => {
+      await rollbackKbVersion(row.kb_version, 'rollback from admin knowledge page')
+      ElMessage.success('知识库版本已切换')
+      fetchKnowledgeWorkbench()
+    })
+    .catch(() => {})
+}
+
+const openOfflineIngestionModal = () => {
+  activeOfflineTask.value = {}
+  const base = activeOfflineConfig.value || {}
+  Object.assign(kbForm, {
+    description: '',
+    autoEnable: true,
+    sourceConfigId: base.id || null,
+    source_data_root: base.source_data_root || '',
+    clean_markdown_dir: base.clean_markdown_dir || '',
+    index_csv_name: base.index_csv_name || 'index.csv',
+    faq_csv_dir: base.faq_csv_dir || 'faq'
+  })
+  kbUploadVisible.value = true
+}
+
+const applyOfflineSourceOption = (configId) => {
+  const option = offlineSourceOptions.value.find((item) => item.id === configId)
+  if (!option) return
+  Object.assign(kbForm, {
+    source_data_root: option.source_data_root,
+    clean_markdown_dir: option.clean_markdown_dir,
+    index_csv_name: option.index_csv_name,
+    faq_csv_dir: option.faq_csv_dir
+  })
+}
+
+const joinServerPath = (root = '', child = '') => {
+  if (!root || !child) return root || child || ''
+  const separator = root.includes('\\') ? '\\' : '/'
+  return `${root.replace(/[\\/]+$/, '')}${separator}${child.replace(/^[\\/]+/, '')}`
+}
+
+const splitServerPath = (path = '') => {
+  const normalized = path.replace(/[\\/]+$/, '')
+  const index = Math.max(normalized.lastIndexOf('\\'), normalized.lastIndexOf('/'))
+  if (index < 0) return { parent: '', name: normalized }
+  let parent = normalized.slice(0, index)
+  if (/^[A-Za-z]:$/.test(parent)) parent = `${parent}\\`
+  return {
+    parent,
+    name: normalized.slice(index + 1)
+  }
+}
+
+const loadServerDirectory = async (path = '') => {
+  directoryPickerLoading.value = true
+  try {
+    const data = await getServerDirectories(path || '')
+    directoryPickerState.currentPath = data.current_path || ''
+    directoryPickerState.parentPath = data.parent_path || null
+    directoryPickerState.directories = data.directories || []
+  } catch (error) {
+    ElMessage.error(error.message || '服务器目录加载失败')
+  } finally {
+    directoryPickerLoading.value = false
+  }
+}
+
+const openDirectoryPicker = async (target) => {
+  directoryPickerTarget.value = target
+  directoryPickerVisible.value = true
+  const startPath =
+    target === 'clean'
+      ? joinServerPath(kbForm.source_data_root, kbForm.clean_markdown_dir)
+      : kbForm.source_data_root
+  await loadServerDirectory(startPath)
+}
+
+const enterServerDirectory = (row) => {
+  if (!row?.path) return
+  loadServerDirectory(row.path)
+}
+
+const selectServerDirectory = (path) => {
+  if (!path) {
+    ElMessage.warning('请先选择服务器目录')
+    return
+  }
+  if (directoryPickerTarget.value === 'clean') {
+    const { parent, name } = splitServerPath(path)
+    kbForm.source_data_root = parent
+    kbForm.clean_markdown_dir = name
+  } else {
+    kbForm.source_data_root = path
+  }
+  directoryPickerVisible.value = false
 }
 
 const getFileExtension = (fileName = '') => {
@@ -1740,23 +2400,7 @@ const getFileExtension = (fileName = '') => {
   return index > -1 ? normalizedName.slice(index + 1) : ''
 }
 
-const isSupportedDocumentFile = (fileName = '') => supportedDocumentExtensions.includes(getFileExtension(fileName))
 const isJsonFile = (fileName = '') => getFileExtension(fileName) === 'json'
-
-const handleKbFileChange = (uploadFile, uploadFiles) => {
-  if (kbForm.ingestionType === 'document' && !isSupportedDocumentFile(uploadFile.name)) {
-    ElMessage.error('文档入库当前仅支持 CSV 和 Markdown(.md) 文件')
-    kbUploadFiles.value = uploadFiles.filter((file) => file.uid !== uploadFile.uid)
-    return false
-  }
-
-  kbUploadFiles.value = uploadFiles
-  return true
-}
-
-const handleKbFileRemove = (_uploadFile, uploadFiles) => {
-  kbUploadFiles.value = uploadFiles
-}
 
 const handleJsonFileChange = (uploadFile, uploadFiles) => {
   if (!isJsonFile(uploadFile.name)) {
@@ -1849,23 +2493,60 @@ const formatJsonImportFailures = (failedItems = []) => {
     .join('；')
 }
 
-const submitKbUpload = () => {
-  if (!kbForm.ingestionType) {
-    ElMessage.error('请选择入库方式')
-    return
+const submitKbUpload = async () => {
+  offlineTaskSubmitting.value = true
+  try {
+    const result = await createOfflineIngestionTask({
+      version_description: kbForm.description || null,
+      auto_publish: kbForm.autoEnable,
+      source_data_root: kbForm.source_data_root,
+      clean_markdown_dir: kbForm.clean_markdown_dir,
+      index_csv_name: kbForm.index_csv_name,
+      faq_csv_dir: kbForm.faq_csv_dir
+    })
+    ElMessage.success('文档入库任务已提交')
+    activeOfflineTask.value = {
+      task_id: result.task_id,
+      status: result.status,
+      progress_percent: 0,
+      current_stage: '等待执行'
+    }
+    await fetchKnowledgeWorkbench()
+    pollOfflineTask(result.task_id)
+  } catch (error) {
+    ElMessage.error(error.message || '文档入库任务提交失败')
+  } finally {
+    offlineTaskSubmitting.value = false
   }
+}
 
-  if (
-    kbForm.ingestionType === 'document' &&
-    kbUploadFiles.value.some((file) => !isSupportedDocumentFile(file.name))
-  ) {
-    ElMessage.error('文档入库当前仅支持 CSV 和 Markdown(.md) 文件')
-    return
+const pollOfflineTask = (taskId) => {
+  if (!taskId) return
+  if (offlineTaskPollTimers.has(taskId)) {
+    clearTimeout(offlineTaskPollTimers.get(taskId))
   }
-
-  ElMessage.success('知识库信息已提交')
-  kbUploadVisible.value = false
-  fetchKBs()
+  const run = async () => {
+    try {
+      const task = await getOfflineIngestionTask(taskId)
+      activeOfflineTask.value = task
+      await fetchKnowledgeWorkbench()
+      if (['pending', 'running'].includes(task.status)) {
+        const timer = setTimeout(run, 3000)
+        offlineTaskPollTimers.set(taskId, timer)
+      } else {
+        offlineTaskPollTimers.delete(taskId)
+        if (task.status === 'completed') {
+          ElMessage.success('文档入库任务已完成')
+        } else if (task.status === 'failed') {
+          ElMessage.error(task.error_message || '文档入库任务失败')
+        }
+      }
+    } catch (error) {
+      offlineTaskPollTimers.delete(taskId)
+      ElMessage.error(error.message || '入库任务状态刷新失败')
+    }
+  }
+  run()
 }
 
 const submitJsonImport = async () => {
@@ -1977,13 +2658,13 @@ const deleteKB = (id) => {
   ElMessageBox.confirm('删除知识库将同步移除相关向量数据，确定继续？', '高危操作', { type: 'error' })
     .then(() => {
       ElMessage.success(`知识库 ${id} 已删除`)
-      fetchKBs()
+      fetchKnowledgeWorkbench()
     })
     .catch(() => {})
 }
 
 const getEvalTagType = (status) => {
-  const maps = { pending: 'info', running: 'primary', success: 'success', failed: 'danger' }
+  const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
   return maps[status] || 'info'
 }
 
@@ -1996,11 +2677,26 @@ const evaluationTabs = [
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
 const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
-const retrievalForm = reactive({ datasetId: '', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
+const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
 const activeRetrievalDetail = ref(null)
 
-const evaluationDatasets = ref([])
+const evaluationDatasets = ref([
+  {
+    datasetId: 'jd_rules_retrieval_v1',
+    name: '京东规则检索评估集',
+    type: 'retrieval_eval',
+    sampleCount: 86,
+    createdAt: '2026-06-23 10:00'
+  },
+  {
+    datasetId: 'jd_rules_mixed_v1',
+    name: '京东规则综合评估集',
+    type: 'mixed',
+    sampleCount: 128,
+    createdAt: '2026-06-22 18:30'
+  }
+])
 
 const filteredEvaluationDatasets = computed(() => {
   const keyword = datasetQuery.keyword.trim()
@@ -2012,21 +2708,139 @@ const filteredEvaluationDatasets = computed(() => {
 })
 
 const ingestionMetrics = reactive({
-  totalChunks: '0',
-  lowQualityChunks: '0',
-  tooShortRate: '0',
-  duplicateRate: '0'
+  totalChunks: '12,000',
+  lowQualityChunks: '340',
+  tooShortRate: '4.0%',
+  duplicateRate: '2.0%'
 })
 
-const problemChunks = ref([])
+const problemChunks = ref([
+  {
+    chunkId: 'chunk_001',
+    ruleId: '923540006109319168',
+    title: '个人/个体合规管理规则',
+    length: 28,
+    issueType: '过短',
+    similarity: '-'
+  },
+  {
+    chunkId: 'chunk_088',
+    ruleId: '1076394019191394304',
+    title: '质保期服务规则',
+    length: 2500,
+    issueType: '过长',
+    similarity: '-'
+  },
+  {
+    chunkId: 'chunk_010',
+    ruleId: '880256294462820352',
+    title: '经营类目商品阈值明细表',
+    length: 820,
+    issueType: '重复',
+    similarity: '0.98'
+  }
+])
 
-const retrievalEvaluations = ref([])
+const retrievalEvaluations = ref([
+  {
+    taskId: 'retrieval_eval_001',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    faqHitAt5: '81.25%',
+    kbRecallAt10: '86.67%',
+    kbMrrAt10: '0.742',
+    errorCount: 1
+  },
+  {
+    taskId: 'retrieval_eval_002',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v2',
+    status: 'running',
+    faqHitAt5: '',
+    kbRecallAt10: '',
+    kbMrrAt10: '',
+    errorCount: 0
+  }
+])
 
-const retrievalCaseResults = ref([])
+const retrievalCaseResults = ref([
+  {
+    caseId: 'eval_0001',
+    question: '个人/个体店出售假冒商品怎么处理？',
+    rewrittenQuestion: '个人个体店 出售假冒商品 处罚',
+    expectedRuleId: '923540006109319168',
+    faqHit: 1,
+    kbRecall: 1,
+    kbRr: 1,
+    hits: [
+      { id: 'faq_001', title: 'FAQ #1 faq_001', score: '0.93', preview: '个人/个体店出售假冒商品怎么处理？' },
+      {
+        id: 'kb_001',
+        title: 'KB #1 个人/个体合规管理规则',
+        score: '0.88',
+        preview: '出售假冒商品的，平台可采取全店商品下架、永久禁止发布新商品、违约金、店铺清退等处理措施...'
+      }
+    ]
+  },
+  {
+    caseId: 'eval_0018',
+    question: 'SSD 固态硬盘最低质保多久？',
+    rewrittenQuestion: 'SSD 固态硬盘 最低质保 周期',
+    expectedRuleId: '1076394019191394304',
+    faqHit: 0,
+    kbRecall: 1,
+    kbRr: 0.5,
+    hits: [
+      { id: 'kb_018', title: 'KB #1 质保期服务规则', score: '0.79', preview: '不同类目商品的质保周期以平台规则和商品详情页承诺为准...' }
+    ]
+  },
+  {
+    caseId: 'eval_0031',
+    question: '宠物健康类目需要什么资质？',
+    rewrittenQuestion: '宠物健康 类目 入驻 资质',
+    expectedRuleId: '880256294462820352',
+    faqHit: 0,
+    kbRecall: 0,
+    kbRr: 0,
+    hits: []
+  }
+])
 
-const activeRetrievalCase = ref({ caseId: '-', hits: [] })
+const activeRetrievalCase = ref(retrievalCaseResults.value[0])
 
-const evaluationRecords = ref([])
+const evaluationRecords = ref([
+  {
+    taskId: 'retrieval_eval_001',
+    type: 'retrieval',
+    typeName: '检索评估',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    metrics: 'FAQ Hit@5 81.25% / KB Recall@10 86.67% / MRR 0.742',
+    finishedAt: '2026-06-23 10:05'
+  },
+  {
+    taskId: 'ingest_eval_014',
+    type: 'ingestion',
+    typeName: '入库质量',
+    datasetId: '-',
+    kbVersion: 'kb_v1',
+    status: 'completed',
+    metrics: '低质量 340 / 过短率 4.0% / 过长率 3.0% / 重复率 2.0%',
+    finishedAt: '2026-06-23 09:40'
+  },
+  {
+    taskId: 'retrieval_eval_002',
+    type: 'retrieval',
+    typeName: '检索评估',
+    datasetId: 'jd_rules_retrieval_v1',
+    kbVersion: 'kb_v2',
+    status: 'running',
+    metrics: '-',
+    finishedAt: '-'
+  }
+])
 
 const filteredEvaluationRecords = computed(() => {
   const keyword = recordQuery.keyword.trim()
@@ -2039,214 +2853,69 @@ const filteredEvaluationRecords = computed(() => {
   })
 })
 
-const defaultEvaluationCases = [
-  {
-    case_id: 'eval_0001',
-    question: '??/??????????????',
-    expected_json: {
-      expected_faq_ids: ['faq_001'],
-      expected_rule_ids: ['923540006109319168']
-    },
-    category: 'policy_fact'
-  },
-  {
-    case_id: 'eval_0002',
-    question: 'SSD ???????????',
-    expected_json: {
-      expected_faq_ids: [],
-      expected_rule_ids: ['1076394019191394304']
-    },
-    category: 'table_lookup'
-  },
-  {
-    case_id: 'eval_0003',
-    question: '?????????????',
-    expected_json: {
-      expected_faq_ids: ['faq_003'],
-      expected_rule_ids: ['880256294462820352']
-    },
-    category: 'policy_fact'
-  }
-]
-
-const toNumberOrNull = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+const fetchEvaluationDatasets = () => {
+  // TODO: replace mock data with backend API when evaluation dataset endpoints are ready.
+  ElMessage.success('评估集列表已刷新')
 }
 
-const applyIngestionRun = (run) => {
-  const summary = run.summary || {}
-  const detail = run.detail || {}
-  ingestionMetrics.totalChunks = String(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
-  ingestionMetrics.lowQualityChunks = String(summary.low_quality_issue_count ?? detail.chunk_metrics?.low_quality_issue_count ?? 0)
-  ingestionMetrics.tooShortRate = String(summary.too_short_chunk_rate ?? detail.chunk_metrics?.too_short_chunk_rate ?? 0)
-  ingestionMetrics.duplicateRate = String(summary.duplicate_group_count ?? detail.chunk_metrics?.duplicate_group_count ?? 0)
-  problemChunks.value = (detail.low_quality_issues || []).slice(0, 100).map((item) => ({
-    chunkId: item.chunk_id,
-    ruleId: item.document_id || '-',
-    title: item.reason,
-    length: item.text_length,
-    issueType: item.issue_type,
-    similarity: item.unique_ratio ?? item.duplicate_hash ?? '-'
-  }))
+const createEvalDataset = () => {
+  // TODO: open dataset creation dialog after backend contract is finalized.
+  ElMessage.info('新建评估集接口待后端接入')
 }
 
-const fetchEvaluationDatasets = async () => {
-  try {
-    const data = await getEvaluationDatasets({ keyword: datasetQuery.keyword, evaluationType: datasetQuery.type })
-    evaluationDatasets.value = data.items || []
-    if (!retrievalForm.datasetId && evaluationDatasets.value.length) {
-      retrievalForm.datasetId = evaluationDatasets.value[0].datasetId
-    }
-  } catch (error) {
-    ElMessage.error(error.message || '?????????')
-  }
+const importEvalSamples = () => {
+  // TODO: connect sample import/upload API.
+  ElMessage.info('样本导入接口待后端接入')
 }
 
-const createEvalDataset = async () => {
-  try {
-    const { value } = await ElMessageBox.prompt('??????ID', '?????', {
-      confirmButtonText: '??',
-      cancelButtonText: '??',
-      inputPattern: /^[a-zA-Z0-9_-]{1,64}$/,
-      inputErrorMessage: '????????????????'
-    })
-    await createEvaluationDataset({
-      dataset_id: value,
-      name: value,
-      evaluation_type: 'retrieval_eval',
-      description: '??????????'
-    })
-    ElMessage.success('??????')
-    await fetchEvaluationDatasets()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.message || '???????')
-  }
+const viewDatasetSamples = (row) => {
+  // TODO: connect dataset sample list API.
+  ElMessage.info(`查看 ${row.datasetId} 样本接口待后端接入`)
 }
 
-const importEvalSamples = async (row) => {
-  const datasetId = row?.datasetId || retrievalForm.datasetId
-  if (!datasetId) {
-    ElMessage.warning('???????')
-    return
-  }
-  try {
-    await importEvaluationCases(datasetId, { overwrite: true, items: defaultEvaluationCases })
-    ElMessage.success('?????????')
-    await fetchEvaluationDatasets()
-  } catch (error) {
-    ElMessage.error(error.message || '??????')
-  }
+const deleteEvalDataset = (row) => {
+  // TODO: connect dataset delete API.
+  ElMessage.warning(`删除评估集 ${row.datasetId} 接口待后端接入`)
 }
 
-const viewDatasetSamples = async (row) => {
-  try {
-    const data = await getEvaluationCases(row.datasetId)
-    ElMessage.success(`${row.datasetId} ???? ${data.total || 0} ???`)
-  } catch (error) {
-    ElMessage.error(error.message || '????????')
-  }
+const runIngestionEvaluation = () => {
+  // TODO: connect ingestion quality evaluation API.
+  ElMessage.success('已生成入库质量评估演示结果')
 }
 
-const deleteEvalDataset = async (row) => {
-  try {
-    await ElMessageBox.confirm(`??????? ${row.datasetId}?`, '?????', { type: 'warning' })
-    await deleteEvaluationDataset(row.datasetId)
-    ElMessage.success('??????')
-    await fetchEvaluationDatasets()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.message || '???????')
-  }
+const createRetrievalEvaluation = () => {
+  // TODO: connect retrieval evaluation task API.
+  ElMessage.success('已创建检索评估演示任务')
 }
 
-const runIngestionEvaluation = async () => {
-  try {
-    const run = await createIngestionQualityRun({
-      dataset: 'enterprise',
-      knowledge_base_version: ingestionForm.kbVersion,
-      min_length: toNumberOrNull(ingestionForm.minLength),
-      max_length: toNumberOrNull(ingestionForm.maxLength),
-      duplicate_threshold: toNumberOrNull(ingestionForm.duplicateThreshold)
-    })
-    applyIngestionRun(run)
-    ElMessage.success('?????????')
-    await fetchEvaluationRecords()
-  } catch (error) {
-    ElMessage.error(error.message || '????????')
-  }
-}
-
-const createRetrievalEvaluation = async () => {
-  if (!retrievalForm.datasetId) {
-    ElMessage.warning('???????')
-    return
-  }
-  try {
-    const run = await createRetrievalRun({
-      dataset_id: retrievalForm.datasetId,
-      knowledge_base_version: retrievalForm.kbVersion,
-      faq_top_k: Number(retrievalForm.faqTopK) || 5,
-      kb_top_k: Number(retrievalForm.kbTopK) || 10,
-      mock_mode: true
-    })
-    retrievalEvaluations.value.unshift(run)
-    ElMessage.success('?????????')
-    await fetchEvaluationRecords()
-  } catch (error) {
-    ElMessage.error(error.message || '????????')
-  }
-}
-
-const openRetrievalDetail = async (row) => {
+const openRetrievalDetail = (row) => {
   activeRetrievalDetail.value = row
-  try {
-    const data = await getEvaluationRunCases(row.runId || row.taskId)
-    retrievalCaseResults.value = data.items || []
-    activeRetrievalCase.value = retrievalCaseResults.value[0] || { caseId: '-', hits: [] }
-  } catch (error) {
-    retrievalCaseResults.value = []
-    activeRetrievalCase.value = { caseId: '-', hits: [] }
-    ElMessage.error(error.message || '??????????')
-  }
+  activeRetrievalCase.value = retrievalCaseResults.value[0]
 }
 
-const rerunRetrievalEvaluation = async (row) => {
-  retrievalForm.datasetId = row.datasetId === '-' ? retrievalForm.datasetId : row.datasetId
-  retrievalForm.kbVersion = row.kbVersion === '-' ? retrievalForm.kbVersion : row.kbVersion
-  await createRetrievalEvaluation()
+const rerunRetrievalEvaluation = (row) => {
+  // TODO: connect retrieval evaluation rerun API.
+  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
 }
 
-const fetchEvaluationRecords = async () => {
-  try {
-    const data = await getEvaluationRuns({
-      evaluationType: recordQuery.type,
-      status: recordQuery.status,
-      keyword: recordQuery.keyword,
-      pageSize: 50
-    })
-    evaluationRecords.value = data.items || []
-    retrievalEvaluations.value = evaluationRecords.value.filter((item) => item.type === 'retrieval_eval')
-  } catch (error) {
-    ElMessage.error(error.message || '????????')
-  }
+const fetchEvaluationRecords = () => {
+  // TODO: replace mock records with backend API.
+  ElMessage.success('评估记录已刷新')
 }
 
-const viewEvaluationRecord = async (row) => {
-  if (row.type === 'retrieval_eval') {
+const viewEvaluationRecord = (row) => {
+  if (row.type === 'retrieval') {
     evaluationTab.value = 'retrieval'
-    await openRetrievalDetail(row)
+    const task = retrievalEvaluations.value.find((item) => item.taskId === row.taskId) || retrievalEvaluations.value[0]
+    openRetrievalDetail(task)
     return
   }
   evaluationTab.value = 'ingestion'
-  if (row.detail) applyIngestionRun(row)
 }
 
-const rerunEvaluationRecord = async (row) => {
-  if (row.type === 'retrieval_eval') {
-    await rerunRetrievalEvaluation(row)
-    return
-  }
-  await runIngestionEvaluation()
+const rerunEvaluationRecord = (row) => {
+  // TODO: connect common evaluation rerun API.
+  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
 }
 
 onMounted(() => {
@@ -2257,9 +2926,14 @@ onMounted(() => {
   fetchConversationHistory()
   fetchKeywordRules()
   fetchTermNormalizations()
-  fetchKBs()
+  fetchKnowledgeWorkbench()
   fetchEvaluationDatasets()
   fetchEvaluationRecords()
+})
+
+onBeforeUnmount(() => {
+  offlineTaskPollTimers.forEach((timer) => clearTimeout(timer))
+  offlineTaskPollTimers.clear()
 })
 </script>
 
@@ -2272,6 +2946,12 @@ onMounted(() => {
 }
 
 .dashboard-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.knowledge-panel {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -2789,6 +3469,61 @@ onMounted(() => {
   padding-top: 14px;
   margin-top: 16px;
   border-top: 1px solid #edf0f5;
+}
+
+.offline-source-desc,
+.offline-ingest-form {
+  margin-top: 16px;
+}
+
+.local-ingest-form {
+  padding-top: 8px;
+}
+
+.local-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.local-folder-row span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: #4e5969;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.local-ingest-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.directory-picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.directory-current-path {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  overflow: hidden;
+  font-size: 13px;
+  color: #4e5969;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f7f8fa;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
 }
 
 .json-import-progress {

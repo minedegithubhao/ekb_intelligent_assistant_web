@@ -1,0 +1,12 @@
+
+> ekb-intelligent-assistant-web@1.0.0 dev
+> vite --host 0.0.0.0 --host 0.0.0.0
+
+
+  [32m[1mVITE[22m v7.3.5[39m  [2mready in [0m[1m355[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.16.10.108:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.11.75:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.48.1:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.88.1:[1m5173[22m/[39m

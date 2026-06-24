@@ -221,6 +221,153 @@
       </div>
     </section>
 
+    <section v-if="currentTab === 'retrievalTest'" class="retrieval-test-panel">
+      <div class="pane-card">
+        <div class="dashboard-header">
+          <div>
+            <h2>检索测试</h2>
+            <p>输入问题后查看最终命中、过滤前候选、score、confidence 和当前阈值。</p>
+          </div>
+          <el-button :loading="retrievalTestLoading" @click="runRetrievalTest">开始测试</el-button>
+        </div>
+
+        <el-form class="retrieval-test-form" label-position="top">
+          <el-form-item label="测试问题">
+            <el-input
+              v-model="retrievalTestForm.question"
+              type="textarea"
+              :rows="3"
+              maxlength="2000"
+              show-word-limit
+              placeholder="例如：不合格商品整改后，商家需要提交什么样的质检报告才能重新上架？"
+            />
+          </el-form-item>
+          <div class="retrieval-test-options">
+            <el-form-item label="知识库类型">
+              <el-radio-group v-model="retrievalTestForm.knowledge_base_type">
+                <el-radio-button label="enterprise">企业知识库</el-radio-button>
+                <el-radio-button label="personal">个人知识库</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="指定 kb_version">
+              <el-input v-model="retrievalTestForm.kb_version" clearable placeholder="默认使用当前 active 版本" />
+            </el-form-item>
+            <el-form-item label="测试模式">
+              <el-switch
+                v-model="retrievalTestForm.include_answer"
+                active-text="调用完整问答"
+                inactive-text="只看候选"
+              />
+            </el-form-item>
+          </div>
+        </el-form>
+      </div>
+
+      <div v-if="retrievalTestResult" class="retrieval-result-grid">
+        <div class="pane-card">
+          <h3>链路结果</h3>
+          <div class="retrieval-stat-grid">
+            <div class="retrieval-stat">
+              <span>命中类型</span>
+              <strong>{{ retrievalAnswer?.hit_type || '未生成' }}</strong>
+            </div>
+            <div class="retrieval-stat">
+              <span>知识库版本</span>
+              <strong>{{ retrievalDebug?.knowledge_base?.kb_version || '-' }}</strong>
+            </div>
+            <div class="retrieval-stat">
+              <span>Doc 阈值</span>
+              <strong>{{ formatScore(retrievalDebug?.thresholds?.doc_evidence_threshold) }}</strong>
+            </div>
+            <div class="retrieval-stat">
+              <span>FAQ 高/中阈值</span>
+              <strong>
+                {{ formatScore(retrievalDebug?.thresholds?.faq_high_conf_threshold) }}
+                /
+                {{ formatScore(retrievalDebug?.thresholds?.faq_middle_conf_threshold) }}
+              </strong>
+            </div>
+          </div>
+
+          <div class="retrieval-answer-box">
+            <span>最终回答</span>
+            <p>{{ retrievalAnswer?.answer || '当前只查看候选，未调用完整问答链路。' }}</p>
+          </div>
+        </div>
+
+        <div class="pane-card">
+          <h3>问题改写与变体</h3>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="归一化问题">
+              {{ retrievalDebug?.normalized_question || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="独立问题">
+              {{ retrievalDebug?.standalone_question || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="规则命中">
+              {{ retrievalDebug?.rule_hit_type || '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <div class="variant-list">
+            <el-tag
+              v-for="variant in retrievalDebug?.query_variants?.query_variants || []"
+              :key="variant"
+              effect="plain"
+            >
+              {{ variant }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="retrievalTestResult" class="pane-card">
+        <h3>Doc 候选（阈值过滤前）</h3>
+        <el-table :data="retrievalDebug?.doc_candidates || []" style="width: 100%">
+          <el-table-column type="index" label="#" width="60" />
+          <el-table-column label="通过" width="80">
+            <template #default="scope">
+              <el-tag :type="scope.row.passed_threshold ? 'success' : 'danger'" size="small">
+                {{ scope.row.passed_threshold ? '是' : '否' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="confidence" width="130">
+            <template #default="scope">{{ formatScore(scope.row.confidence) }}</template>
+          </el-table-column>
+          <el-table-column label="score" width="130">
+            <template #default="scope">{{ formatScore(scope.row.score) }}</template>
+          </el-table-column>
+          <el-table-column prop="source_doc_id" label="source_doc_id" width="190" />
+          <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+          <el-table-column label="内容预览" min-width="360" show-overflow-tooltip>
+            <template #default="scope">{{ evidencePreview(scope.row) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div v-if="retrievalTestResult" class="pane-card">
+        <h3>FAQ 候选（阈值过滤前）</h3>
+        <el-table :data="retrievalDebug?.faq_candidates || []" style="width: 100%">
+          <el-table-column type="index" label="#" width="60" />
+          <el-table-column label="高/中" width="100">
+            <template #default="scope">
+              <el-tag v-if="scope.row.passed_high_threshold" type="success" size="small">高</el-tag>
+              <el-tag v-else-if="scope.row.passed_middle_threshold" type="warning" size="small">中</el-tag>
+              <el-tag v-else type="info" size="small">低</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="confidence" width="130">
+            <template #default="scope">{{ formatScore(scope.row.confidence) }}</template>
+          </el-table-column>
+          <el-table-column label="score" width="130">
+            <template #default="scope">{{ formatScore(scope.row.score) }}</template>
+          </el-table-column>
+          <el-table-column prop="title" label="问题" min-width="260" show-overflow-tooltip />
+          <el-table-column prop="answer" label="答案" min-width="360" show-overflow-tooltip />
+        </el-table>
+      </div>
+    </section>
+
     <section v-if="currentTab === 'keywordRules'" class="keyword-rule-panel">
       <div class="pane-card">
         <div class="dashboard-header">
@@ -1249,6 +1396,7 @@ import {
   updateTermNormalization
 } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
+import { testRetrieval } from '@/api/adminRetrieval'
 import { createKbVersion, getKbVersionPointer, getKbVersions, publishKbVersion, rollbackKbVersion } from '@/api/kbVersions'
 import {
   activateOfflineIngestionConfig,
@@ -1268,6 +1416,14 @@ import AdminLayout from '@/layouts/AdminLayout.vue'
 const currentTab = ref('dashboard')
 const loading = ref(false)
 const currentUserId = JSON.parse(localStorage.getItem('userInfo') || '{}').id
+const retrievalTestLoading = ref(false)
+const retrievalTestResult = ref(null)
+const retrievalTestForm = reactive({
+  question: '不合格商品整改后，商家需要提交什么样的质检报告才能重新上架？',
+  knowledge_base_type: 'enterprise',
+  kb_version: '',
+  include_answer: true
+})
 const dashboardLoading = ref(false)
 const dashboardConfig = ref({})
 const configModalVisible = ref(false)
@@ -1352,6 +1508,45 @@ const configForm = reactive({
 })
 
 const editableConfigKeys = Object.keys(configForm)
+
+const retrievalAnswer = computed(() => retrievalTestResult.value?.answer_result || null)
+const retrievalDebug = computed(() => retrievalTestResult.value?.candidate_debug || null)
+
+const formatScore = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+  const number = Number(value)
+  if (Number.isNaN(number)) {
+    return String(value)
+  }
+  return number.toFixed(6)
+}
+
+const evidencePreview = (row) => row?.parent_content || row?.text || row?.answer || '-'
+
+const runRetrievalTest = async () => {
+  const question = retrievalTestForm.question.trim()
+  if (!question) {
+    ElMessage.warning('请输入测试问题')
+    return
+  }
+  retrievalTestLoading.value = true
+  try {
+    retrievalTestResult.value = await testRetrieval({
+      question,
+      knowledge_base_type: retrievalTestForm.knowledge_base_type,
+      kb_version: retrievalTestForm.kb_version || null,
+      include_answer: retrievalTestForm.include_answer
+    })
+    ElMessage.success('检索测试完成')
+  } catch (error) {
+    ElMessage.error(error.message || '检索测试失败')
+  } finally {
+    retrievalTestLoading.value = false
+  }
+}
+
 const dashboardParamRows = computed(() => {
   const values = dashboardConfig.value.hot_values || dashboardConfig.value.raw || {}
   return paramMetas.map((item) => ({
@@ -2955,6 +3150,84 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.retrieval-test-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.retrieval-test-form {
+  margin-top: 18px;
+}
+
+.retrieval-test-options {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(260px, 1fr) minmax(220px, 260px);
+  gap: 16px;
+  align-items: end;
+}
+
+.retrieval-result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 20px;
+}
+
+.retrieval-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.retrieval-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 76px;
+  padding: 14px;
+  background: #f7f9fc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.retrieval-stat span,
+.retrieval-answer-box span {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.retrieval-stat strong {
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  color: #1d2129;
+}
+
+.retrieval-answer-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 14px;
+  color: #1d2129;
+  white-space: pre-wrap;
+  background: #fbfcff;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.retrieval-answer-box p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.variant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .dashboard-header,

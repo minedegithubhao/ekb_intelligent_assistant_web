@@ -385,16 +385,17 @@
           <el-input v-model="datasetQuery.keyword" placeholder="评估集名称 / ID" class="filter-item history-search-input" clearable />
           <el-select v-model="datasetQuery.type" placeholder="评估类型" class="filter-item" clearable>
             <el-option label="retrieval_eval" value="retrieval_eval" />
+            <el-option label="ingestion_quality" value="ingestion_quality" />
             <el-option label="mixed" value="mixed" />
           </el-select>
           <el-button type="primary" @click="fetchEvaluationDatasets">查询</el-button>
           <el-button type="primary" plain class="right-action" @click="createEvalDataset">新建评估集</el-button>
-          <el-button type="primary" plain @click="importEvalSamples()">导入样本</el-button>
         </div>
 
         <el-table :data="filteredEvaluationDatasets" style="width: 100%">
-          <el-table-column prop="datasetId" label="评估集ID" min-width="190" />
-          <el-table-column prop="name" label="评估集名称" min-width="220" />
+          <el-table-column prop="datasetId" label="评估集ID" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="name" label="评估集名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip />
           <el-table-column label="适用类型" width="150">
             <template #default="scope">
               <el-tag :type="scope.row.type === 'mixed' ? 'warning' : 'primary'" effect="plain">
@@ -414,12 +415,52 @@
         </el-table>
       </section>
 
+
+      <section v-if="evaluationTab === 'samples'" class="pane-card">
+        <div class="filter-wrapper">
+          <el-select v-model="sampleQuery.datasetId" placeholder="评估集" class="filter-item wide-select" clearable filterable>
+            <el-option
+              v-for="item in evaluationDatasets"
+              :key="item.datasetId"
+              :label="`${item.datasetId} ｜ ${item.name}`"
+              :value="item.datasetId"
+            />
+          </el-select>
+          <el-input v-model="sampleQuery.category" placeholder="分类" class="filter-item" clearable />
+          <el-input v-model="sampleQuery.keyword" placeholder="样本ID / 问题 / 评估集" class="filter-item history-search-input" clearable />
+          <el-button type="primary" @click="fetchAllEvaluationSamples">查询</el-button>
+          <el-button type="primary" plain class="right-action" @click="openSampleCreateDialog">新增样本</el-button>
+        </div>
+
+        <el-table :data="allEvaluationSamples" v-loading="sampleOverviewLoading" style="width: 100%">
+          <el-table-column prop="datasetId" label="评估集ID" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="datasetName" label="评估集名称" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="caseId" label="样本ID" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="question" label="问题" min-width="260" show-overflow-tooltip />
+          <el-table-column label="期望结果 JSON" min-width="260" show-overflow-tooltip>
+            <template #default="scope">
+              <code>{{ formatJson(scope.row.expectedJson) }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column prop="category" label="分类" width="130" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建时间" width="170" />
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="scope">
+              <el-button link type="danger" @click="deleteSingleEvalSample(scope.row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
       <section v-if="evaluationTab === 'ingestion'" class="evaluation-panel">
         <div class="pane-card">
           <div class="filter-wrapper">
-            <el-select v-model="ingestionForm.kbVersion" placeholder="知识库版本" class="filter-item">
-              <el-option label="kb_v1" value="kb_v1" />
-              <el-option label="kb_v2" value="kb_v2" />
+            <el-select v-model="ingestionForm.kbVersion" placeholder="知识库版本" class="filter-item wide-select" filterable :loading="kbVersionsLoading">
+              <el-option
+                v-for="item in kbVersionOptions"
+                :key="item.kbVersion"
+                :label="item.label"
+                :value="item.kbVersion"
+              />
             </el-select>
             <el-input v-model="ingestionForm.minLength" placeholder="最短 80 字" class="filter-item" />
             <el-input v-model="ingestionForm.maxLength" placeholder="最长 1800 字" class="filter-item" />
@@ -478,9 +519,13 @@
                   :value="item.datasetId"
                 />
               </el-select>
-              <el-select v-model="retrievalForm.kbVersion" placeholder="知识库版本" class="filter-item">
-                <el-option label="kb_v1" value="kb_v1" />
-                <el-option label="kb_v2" value="kb_v2" />
+              <el-select v-model="retrievalForm.kbVersion" placeholder="知识库版本" class="filter-item wide-select" filterable :loading="kbVersionsLoading">
+                <el-option
+                  v-for="item in kbVersionOptions"
+                  :key="item.kbVersion"
+                  :label="item.label"
+                  :value="item.kbVersion"
+                />
               </el-select>
               <el-input v-model="retrievalForm.faqTopK" placeholder="FAQ TopK 5" class="filter-item" />
               <el-input v-model="retrievalForm.kbTopK" placeholder="KB TopK 10" class="filter-item" />
@@ -516,6 +561,14 @@
         </template>
 
         <template v-else>
+          <div class="pane-card run-info-card">
+            <el-descriptions :column="4" border>
+              <el-descriptions-item label="评估集">{{ activeRetrievalDetail.datasetId }}</el-descriptions-item>
+              <el-descriptions-item label="知识库版本">{{ activeRetrievalDetail.kbVersion }}</el-descriptions-item>
+              <el-descriptions-item label="FAQ TopK">{{ activeRetrievalDetail.config?.faq_top_k ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="KB TopK">{{ activeRetrievalDetail.config?.kb_top_k ?? '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
           <el-button :icon="ArrowLeft" class="back-btn" @click="activeRetrievalDetail = null">返回列表</el-button>
           <div class="eval-metric-grid">
             <div class="metric-card">
@@ -574,8 +627,8 @@
         <div class="pane-card">
           <div class="filter-wrapper">
             <el-select v-model="recordQuery.type" placeholder="评估类型" class="filter-item" clearable>
-              <el-option label="检索评估" value="retrieval" />
-              <el-option label="入库质量" value="ingestion" />
+              <el-option label="检索评估" value="retrieval_eval" />
+              <el-option label="入库质量" value="ingestion_quality" />
             </el-select>
             <el-select v-model="recordQuery.status" placeholder="任务状态" class="filter-item" clearable>
               <el-option label="success" value="success" />
@@ -846,6 +899,140 @@
       </template>
     </el-dialog>
 
+
+
+    <el-dialog v-model="sampleCreateDialogVisible" title="新增评估样本" width="620px">
+      <el-form :model="sampleCreateForm" label-position="top">
+        <el-form-item label="所属评估集" required>
+          <el-select v-model="sampleCreateForm.datasetId" placeholder="请选择评估集" style="width: 100%" filterable>
+            <el-option
+              v-for="item in evaluationDatasets"
+              :key="item.datasetId"
+              :label="`${item.datasetId} ｜ ${item.name}`"
+              :value="item.datasetId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="样本ID">
+          <el-input v-model="sampleCreateForm.caseId" placeholder="留空自动生成" />
+        </el-form-item>
+        <el-form-item label="问题" required>
+          <el-input v-model="sampleCreateForm.question" placeholder="请输入标准评估问题" />
+        </el-form-item>
+        <el-form-item label="期望 FAQ ID">
+          <el-input v-model="sampleCreateForm.expectedFaqIds" placeholder="多个用英文逗号分隔" />
+        </el-form-item>
+        <el-form-item label="期望知识库规则 ID">
+          <el-input v-model="sampleCreateForm.expectedRuleIds" placeholder="多个用英文逗号分隔" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-input v-model="sampleCreateForm.category" placeholder="如 policy_fact / table_lookup" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sampleCreateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sampleCreateSaving" @click="submitSampleCreate">保存</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="evalDatasetDialogVisible" title="新建评估集" width="560px">
+      <el-form :model="evalDatasetForm" label-position="top">
+        <el-form-item label="评估集ID">
+          <el-input v-model="evalDatasetForm.datasetId" disabled />
+        </el-form-item>
+        <el-form-item label="评估集名称" required>
+          <el-input v-model="evalDatasetForm.name" placeholder="请输入评估集名称" />
+        </el-form-item>
+        <el-form-item label="适用类型" required>
+          <el-select v-model="evalDatasetForm.evaluationType" style="width: 100%">
+            <el-option label="检索评估" value="retrieval_eval" />
+            <el-option label="入库质量评估" value="ingestion_quality" />
+            <el-option label="混合评估" value="mixed" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="evalDatasetForm.description" type="textarea" :rows="3" placeholder="说明样本来源、覆盖场景或使用边界" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="evalDatasetDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="evalDatasetSaving" @click="submitEvalDataset">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="sampleDialogVisible"
+      :title="activeDataset ? `${activeDataset.name} 样本` : '评估样本'"
+      width="1120px"
+      class="sample-dialog"
+    >
+      <div class="sample-dialog-toolbar">
+        <div>
+          <strong>{{ activeDataset?.datasetId || '-' }}</strong>
+          <span>{{ activeDataset?.description || '暂无描述' }}</span>
+        </div>
+        <div class="sample-dialog-actions">
+          <el-button @click="downloadEvalSampleTemplate">下载 JSON 示例</el-button>
+          <el-button type="primary" plain @click="importEvalSamples(activeDataset)">导入默认样本</el-button>
+        </div>
+      </div>
+
+      <el-table :data="activeDatasetSamples" v-loading="sampleDialogLoading" style="width: 100%" max-height="320">
+        <el-table-column prop="caseId" label="样本ID" width="150" show-overflow-tooltip />
+        <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
+        <el-table-column label="期望结果 JSON" min-width="280" show-overflow-tooltip>
+          <template #default="scope">
+            <code>{{ formatJson(scope.row.expectedJson) }}</code>
+          </template>
+        </el-table-column>
+        <el-table-column prop="category" label="分类" width="130" show-overflow-tooltip />
+        <el-table-column prop="createdAt" label="创建时间" width="170" />
+      </el-table>
+
+      <div class="sample-import-grid">
+        <div class="sample-import-panel">
+          <div class="sample-import-head">
+            <h4>批量 JSON 导入</h4>
+            <el-button link type="primary" @click="fillSampleTemplate">填入示例</el-button>
+          </div>
+          <el-input
+            v-model="sampleImportJson"
+            type="textarea"
+            :rows="9"
+            placeholder='粘贴 JSON 数组，或 { "items": [...] }'
+          />
+          <div class="panel-actions sample-panel-actions">
+            <el-button type="primary" @click="importBatchSampleJson">批量导入</el-button>
+          </div>
+        </div>
+
+        <div class="sample-import-panel">
+          <div class="sample-import-head">
+            <h4>单条样本导入</h4>
+            <el-button link type="primary" @click="resetSingleSampleForm">重置</el-button>
+          </div>
+          <el-form :model="singleSampleForm" label-position="top" class="single-sample-form">
+            <el-form-item label="样本ID">
+              <el-input v-model="singleSampleForm.caseId" placeholder="留空自动生成" />
+            </el-form-item>
+            <el-form-item label="问题" required>
+              <el-input v-model="singleSampleForm.question" placeholder="请输入标准评估问题" />
+            </el-form-item>
+            <el-form-item label="期望 FAQ ID">
+              <el-input v-model="singleSampleForm.expectedFaqIds" placeholder="多个用英文逗号分隔" />
+            </el-form-item>
+            <el-form-item label="期望知识库规则 ID">
+              <el-input v-model="singleSampleForm.expectedRuleIds" placeholder="多个用英文逗号分隔" />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-input v-model="singleSampleForm.category" placeholder="如 policy_fact / table_lookup" />
+            </el-form-item>
+          </el-form>
+          <div class="panel-actions sample-panel-actions">
+            <el-button type="primary" @click="importSingleEvalSample">导入单条样本</el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
     <el-dialog
       v-model="jsonImportVisible"
       title="JSON 入库"
@@ -980,13 +1167,16 @@ import {
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
 import {
   createEvaluationDataset,
+  deleteEvaluationCase,
   createIngestionQualityRun,
   createRetrievalRun,
   deleteEvaluationDataset,
+  getAllEvaluationCases,
   getEvaluationCases,
   getEvaluationDatasets,
   getEvaluationRunCases,
   getEvaluationRuns,
+  getKbVersions,
   importEvaluationCases
 } from '@/api/adminEvaluation'
 import { importJsonVectors } from '@/api/vectorIngestJson'
@@ -1990,17 +2180,35 @@ const getEvalTagType = (status) => {
 const evaluationTab = ref('datasets')
 const evaluationTabs = [
   { name: 'datasets', label: '评估集管理' },
+  { name: 'samples', label: '样本总览' },
   { name: 'ingestion', label: '入库质量评估' },
   { name: 'retrieval', label: '检索评估' },
   { name: 'records', label: '评估记录' }
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
-const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
-const retrievalForm = reactive({ datasetId: '', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
+const ingestionForm = reactive({ kbVersion: '', minLength: '', maxLength: '', duplicateThreshold: '' })
+const retrievalForm = reactive({ datasetId: '', kbVersion: '', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
 const activeRetrievalDetail = ref(null)
 
 const evaluationDatasets = ref([])
+const kbVersionOptions = ref([])
+const kbVersionsLoading = ref(false)
+const evalDatasetDialogVisible = ref(false)
+const evalDatasetSaving = ref(false)
+const evalDatasetForm = reactive({ datasetId: '', name: '', evaluationType: 'retrieval_eval', description: '' })
+const sampleDialogVisible = ref(false)
+const sampleDialogLoading = ref(false)
+const activeDataset = ref(null)
+const activeDatasetSamples = ref([])
+const sampleImportJson = ref('')
+const singleSampleForm = reactive({ caseId: '', question: '', expectedFaqIds: '', expectedRuleIds: '', category: '' })
+const sampleQuery = reactive({ datasetId: '', category: '', keyword: '' })
+const allEvaluationSamples = ref([])
+const sampleOverviewLoading = ref(false)
+const sampleCreateDialogVisible = ref(false)
+const sampleCreateSaving = ref(false)
+const sampleCreateForm = reactive({ datasetId: '', caseId: '', question: '', expectedFaqIds: '', expectedRuleIds: '', category: '' })
 
 const filteredEvaluationDatasets = computed(() => {
   const keyword = datasetQuery.keyword.trim()
@@ -2041,46 +2249,158 @@ const filteredEvaluationRecords = computed(() => {
 
 const defaultEvaluationCases = [
   {
-    case_id: 'eval_0001',
-    question: '??/??????????????',
+    case_id: 'eval_sample_001',
+    question: '公司的年假规则是什么？',
     expected_json: {
       expected_faq_ids: ['faq_001'],
-      expected_rule_ids: ['923540006109319168']
+      expected_rule_ids: ['rule_annual_leave']
     },
     category: 'policy_fact'
   },
   {
-    case_id: 'eval_0002',
-    question: 'SSD ???????????',
+    case_id: 'eval_sample_002',
+    question: 'SSD 故障时应该如何申请更换？',
     expected_json: {
       expected_faq_ids: [],
-      expected_rule_ids: ['1076394019191394304']
+      expected_rule_ids: ['rule_ssd_replacement']
     },
-    category: 'table_lookup'
+    category: 'process_lookup'
   },
   {
-    case_id: 'eval_0003',
-    question: '?????????????',
+    case_id: 'eval_sample_003',
+    question: '报销发票抬头填写有什么要求？',
     expected_json: {
-      expected_faq_ids: ['faq_003'],
-      expected_rule_ids: ['880256294462820352']
+      expected_faq_ids: ['faq_invoice_title'],
+      expected_rule_ids: ['rule_reimbursement_invoice']
     },
     category: 'policy_fact'
   }
 ]
 
+const formatJson = (value) => JSON.stringify(value || {}, null, 2)
+
+const pad2 = (value) => String(value).padStart(2, '0')
+
+const formatCompactDate = (date = new Date()) => {
+  return [
+    date.getFullYear(),
+    pad2(date.getMonth() + 1),
+    pad2(date.getDate()),
+    pad2(date.getHours()),
+    pad2(date.getMinutes()),
+    pad2(date.getSeconds())
+  ].join('')
+}
+
+const generateEvalDatasetId = () => `eval_set_${formatCompactDate()}_${Math.random().toString(36).slice(2, 6)}`
+
+const generateEvalCaseId = () => `eval_case_${formatCompactDate()}_${Math.random().toString(36).slice(2, 6)}`
+
+const resetEvalDatasetForm = () => {
+  evalDatasetForm.datasetId = generateEvalDatasetId()
+  evalDatasetForm.name = ''
+  evalDatasetForm.evaluationType = 'retrieval_eval'
+  evalDatasetForm.description = ''
+}
+
+
+const resetSampleCreateForm = () => {
+  sampleCreateForm.datasetId = sampleQuery.datasetId || evaluationDatasets.value[0]?.datasetId || ''
+  sampleCreateForm.caseId = ''
+  sampleCreateForm.question = ''
+  sampleCreateForm.expectedFaqIds = ''
+  sampleCreateForm.expectedRuleIds = ''
+  sampleCreateForm.category = sampleQuery.category || ''
+}
+
+const openSampleCreateDialog = () => {
+  resetSampleCreateForm()
+  sampleCreateDialogVisible.value = true
+}
+const resetSingleSampleForm = () => {
+  singleSampleForm.caseId = ''
+  singleSampleForm.question = ''
+  singleSampleForm.expectedFaqIds = ''
+  singleSampleForm.expectedRuleIds = ''
+  singleSampleForm.category = ''
+}
+
+const fillSampleTemplate = () => {
+  sampleImportJson.value = formatJson({ items: defaultEvaluationCases })
+}
+
+const normalizeExpectedList = (value) => String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
+
+const normalizeSampleItem = (item) => ({
+  case_id: String(item.case_id || item.caseId || generateEvalCaseId()).trim(),
+  question: String(item.question || '').trim(),
+  expected_json: item.expected_json || item.expectedJson || {
+    expected_faq_ids: normalizeExpectedList(item.expected_faq_ids || item.expectedFaqIds),
+    expected_rule_ids: normalizeExpectedList(item.expected_rule_ids || item.expectedRuleIds)
+  },
+  category: item.category || null
+})
+
+const parseSampleImportJson = () => {
+  const raw = sampleImportJson.value.trim()
+  if (!raw) throw new Error('请先粘贴样本 JSON')
+  const parsed = JSON.parse(raw)
+  const items = Array.isArray(parsed) ? parsed : parsed.items
+  if (!Array.isArray(items) || items.length === 0) throw new Error('JSON 需要是数组，或包含 items 数组')
+  return items.map(normalizeSampleItem).filter((item) => item.case_id && item.question)
+}
+
+const downloadEvalSampleTemplate = () => {
+  const content = formatJson({ items: defaultEvaluationCases })
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'evaluation_samples_template.json'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+const applyDefaultKbVersion = (version) => {
+  if (!version) return
+  if (!ingestionForm.kbVersion) ingestionForm.kbVersion = version
+  if (!retrievalForm.kbVersion) retrievalForm.kbVersion = version
+}
+
+const fetchKbVersionOptions = async () => {
+  kbVersionsLoading.value = true
+  try {
+    const data = await getKbVersions()
+    kbVersionOptions.value = data.items || []
+    const defaultVersion = data.activeVersion || kbVersionOptions.value[0]?.kbVersion || ''
+    applyDefaultKbVersion(defaultVersion)
+  } catch (error) {
+    ElMessage.error(error.message || '知识库版本列表获取失败')
+  } finally {
+    kbVersionsLoading.value = false
+  }
+}
 const toNumberOrNull = (value) => {
+  if (value === null || value === undefined || String(value).trim() === '') return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
+
+const numberOrDefault = (value, defaultValue) => {
+  const parsed = toNumberOrNull(value)
+  return parsed === null ? defaultValue : parsed
+}
+
+const formatPercentMetric = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`
 
 const applyIngestionRun = (run) => {
   const summary = run.summary || {}
   const detail = run.detail || {}
   ingestionMetrics.totalChunks = String(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
   ingestionMetrics.lowQualityChunks = String(summary.low_quality_issue_count ?? detail.chunk_metrics?.low_quality_issue_count ?? 0)
-  ingestionMetrics.tooShortRate = String(summary.too_short_chunk_rate ?? detail.chunk_metrics?.too_short_chunk_rate ?? 0)
-  ingestionMetrics.duplicateRate = String(summary.duplicate_group_count ?? detail.chunk_metrics?.duplicate_group_count ?? 0)
+  const chunkCount = Number(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
+  const duplicateChunkCount = Number(summary.duplicate_chunk_count ?? detail.chunk_metrics?.duplicate_chunk_count ?? 0)
+  ingestionMetrics.tooShortRate = formatPercentMetric(summary.too_short_chunk_rate ?? detail.chunk_metrics?.too_short_chunk_rate ?? 0)
+  ingestionMetrics.duplicateRate = formatPercentMetric(chunkCount ? duplicateChunkCount / chunkCount : 0)
   problemChunks.value = (detail.low_quality_issues || []).slice(0, 100).map((item) => ({
     chunkId: item.chunk_id,
     ruleId: item.document_id || '-',
@@ -2099,63 +2419,210 @@ const fetchEvaluationDatasets = async () => {
       retrievalForm.datasetId = evaluationDatasets.value[0].datasetId
     }
   } catch (error) {
-    ElMessage.error(error.message || '?????????')
+    ElMessage.error(error.message || '评估集加载失败')
   }
 }
 
-const createEvalDataset = async () => {
+
+const fetchAllEvaluationSamples = async () => {
+  sampleOverviewLoading.value = true
   try {
-    const { value } = await ElMessageBox.prompt('??????ID', '?????', {
-      confirmButtonText: '??',
-      cancelButtonText: '??',
-      inputPattern: /^[a-zA-Z0-9_-]{1,64}$/,
-      inputErrorMessage: '????????????????'
+    const data = await getAllEvaluationCases({
+      datasetId: sampleQuery.datasetId,
+      category: sampleQuery.category,
+      keyword: sampleQuery.keyword,
+      pageSize: 200
     })
+    allEvaluationSamples.value = data.items || []
+  } catch (error) {
+    ElMessage.error(error.message || '样本列表加载失败')
+  } finally {
+    sampleOverviewLoading.value = false
+  }
+}
+
+const submitSampleCreate = async () => {
+  if (!sampleCreateForm.datasetId) {
+    ElMessage.warning('请选择评估集')
+    return
+  }
+  if (!sampleCreateForm.question.trim()) {
+    ElMessage.warning('请填写问题')
+    return
+  }
+  sampleCreateSaving.value = true
+  try {
+    const item = normalizeSampleItem({
+      caseId: sampleCreateForm.caseId,
+      question: sampleCreateForm.question,
+      expectedFaqIds: sampleCreateForm.expectedFaqIds,
+      expectedRuleIds: sampleCreateForm.expectedRuleIds,
+      category: sampleCreateForm.category
+    })
+    await importEvaluationCases(sampleCreateForm.datasetId, { overwrite: true, items: [item] })
+    ElMessage.success('样本新增成功')
+    sampleCreateDialogVisible.value = false
+    await fetchEvaluationDatasets()
+    await fetchAllEvaluationSamples()
+    if (activeDataset.value?.datasetId === sampleCreateForm.datasetId) {
+      await refreshDatasetSamples()
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '样本新增失败')
+  } finally {
+    sampleCreateSaving.value = false
+  }
+}
+
+const deleteSingleEvalSample = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定删除样本 ${row.caseId} 吗？如果所属评估集已有评估记录，后端会拒绝删除。`, '删除评估样本', {
+      type: 'warning'
+    })
+    await deleteEvaluationCase(row.datasetId, row.caseId)
+    ElMessage.success('样本已删除')
+    await fetchEvaluationDatasets()
+    await fetchAllEvaluationSamples()
+    if (activeDataset.value?.datasetId === row.datasetId) {
+      await refreshDatasetSamples()
+    }
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '样本删除失败')
+  }
+}
+const createEvalDataset = () => {
+  resetEvalDatasetForm()
+  evalDatasetDialogVisible.value = true
+}
+
+const submitEvalDataset = async () => {
+  const datasetId = evalDatasetForm.datasetId.trim()
+  const name = evalDatasetForm.name.trim()
+  if (!datasetId) {
+    ElMessage.warning('评估集ID不能为空')
+    return
+  }
+  if (!name) {
+    ElMessage.warning('评估集名称不能为空')
+    return
+  }
+  evalDatasetSaving.value = true
+  try {
     await createEvaluationDataset({
-      dataset_id: value,
-      name: value,
-      evaluation_type: 'retrieval_eval',
-      description: '??????????'
+      dataset_id: datasetId,
+      name,
+      evaluation_type: evalDatasetForm.evaluationType,
+      description: evalDatasetForm.description.trim()
     })
-    ElMessage.success('??????')
+    ElMessage.success('评估集创建成功')
+    evalDatasetDialogVisible.value = false
     await fetchEvaluationDatasets()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.message || '???????')
+    ElMessage.error(error.message || '评估集创建失败')
+  } finally {
+    evalDatasetSaving.value = false
+  }
+}
+
+const openDatasetSamples = async (row) => {
+  activeDataset.value = row
+  sampleDialogVisible.value = true
+  await refreshDatasetSamples()
+}
+
+const refreshDatasetSamples = async () => {
+  if (!activeDataset.value?.datasetId) {
+    activeDatasetSamples.value = []
+    return
+  }
+  sampleDialogLoading.value = true
+  try {
+    const data = await getEvaluationCases(activeDataset.value.datasetId)
+    activeDatasetSamples.value = data.items || []
+    activeDataset.value = {
+      ...activeDataset.value,
+      sampleCount: data.total ?? activeDatasetSamples.value.length
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '样本加载失败')
+    activeDatasetSamples.value = []
+  } finally {
+    sampleDialogLoading.value = false
   }
 }
 
 const importEvalSamples = async (row) => {
   const datasetId = row?.datasetId || retrievalForm.datasetId
   if (!datasetId) {
-    ElMessage.warning('???????')
+    ElMessage.warning('请先选择评估集')
     return
   }
   try {
     await importEvaluationCases(datasetId, { overwrite: true, items: defaultEvaluationCases })
-    ElMessage.success('?????????')
+    ElMessage.success('默认样本已导入')
     await fetchEvaluationDatasets()
+    if (activeDataset.value?.datasetId === datasetId) {
+      await refreshDatasetSamples()
+    }
   } catch (error) {
-    ElMessage.error(error.message || '??????')
+    ElMessage.error(error.message || '样本导入失败')
+  }
+}
+
+const importBatchSampleJson = async () => {
+  if (!activeDataset.value?.datasetId) {
+    ElMessage.warning('请先打开评估样本弹窗')
+    return
+  }
+  try {
+    const items = parseSampleImportJson()
+    await importEvaluationCases(activeDataset.value.datasetId, { overwrite: true, items })
+    ElMessage.success(`已导入 ${items.length} 条样本`)
+    await fetchEvaluationDatasets()
+    await refreshDatasetSamples()
+  } catch (error) {
+    ElMessage.error(error.message || '批量导入失败')
+  }
+}
+
+const importSingleEvalSample = async () => {
+  if (!activeDataset.value?.datasetId) {
+    ElMessage.warning('请先打开评估样本弹窗')
+    return
+  }
+  if (!singleSampleForm.question.trim()) {
+    ElMessage.warning('请填写问题')
+    return
+  }
+  try {
+    const item = normalizeSampleItem({
+      caseId: singleSampleForm.caseId,
+      question: singleSampleForm.question,
+      expectedFaqIds: singleSampleForm.expectedFaqIds,
+      expectedRuleIds: singleSampleForm.expectedRuleIds,
+      category: singleSampleForm.category
+    })
+    await importEvaluationCases(activeDataset.value.datasetId, { overwrite: true, items: [item] })
+    ElMessage.success('单条样本已导入')
+    await fetchEvaluationDatasets()
+    await refreshDatasetSamples()
+    resetSingleSampleForm()
+  } catch (error) {
+    ElMessage.error(error.message || '单条导入失败')
   }
 }
 
 const viewDatasetSamples = async (row) => {
-  try {
-    const data = await getEvaluationCases(row.datasetId)
-    ElMessage.success(`${row.datasetId} ???? ${data.total || 0} ???`)
-  } catch (error) {
-    ElMessage.error(error.message || '????????')
-  }
+  await openDatasetSamples(row)
 }
-
 const deleteEvalDataset = async (row) => {
   try {
-    await ElMessageBox.confirm(`??????? ${row.datasetId}?`, '?????', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除评估集 ${row.datasetId} 吗？`, '删除评估集', { type: 'warning' })
     await deleteEvaluationDataset(row.datasetId)
-    ElMessage.success('??????')
+    ElMessage.success('评估集已删除')
     await fetchEvaluationDatasets()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.message || '???????')
+    if (error !== 'cancel') ElMessage.error(error.message || '评估集删除失败')
   }
 }
 
@@ -2164,21 +2631,21 @@ const runIngestionEvaluation = async () => {
     const run = await createIngestionQualityRun({
       dataset: 'enterprise',
       knowledge_base_version: ingestionForm.kbVersion,
-      min_length: toNumberOrNull(ingestionForm.minLength),
-      max_length: toNumberOrNull(ingestionForm.maxLength),
-      duplicate_threshold: toNumberOrNull(ingestionForm.duplicateThreshold)
+      min_length: numberOrDefault(ingestionForm.minLength, 80),
+      max_length: numberOrDefault(ingestionForm.maxLength, 1800),
+      duplicate_threshold: numberOrDefault(ingestionForm.duplicateThreshold, 0.95)
     })
     applyIngestionRun(run)
-    ElMessage.success('?????????')
+    ElMessage.success('入库质量评估完成')
     await fetchEvaluationRecords()
   } catch (error) {
-    ElMessage.error(error.message || '????????')
+    ElMessage.error(error.message || '入库质量评估失败')
   }
 }
 
 const createRetrievalEvaluation = async () => {
   if (!retrievalForm.datasetId) {
-    ElMessage.warning('???????')
+    ElMessage.warning('请选择评估集')
     return
   }
   try {
@@ -2187,13 +2654,13 @@ const createRetrievalEvaluation = async () => {
       knowledge_base_version: retrievalForm.kbVersion,
       faq_top_k: Number(retrievalForm.faqTopK) || 5,
       kb_top_k: Number(retrievalForm.kbTopK) || 10,
-      mock_mode: true
+      mock_mode: false
     })
     retrievalEvaluations.value.unshift(run)
-    ElMessage.success('?????????')
+    ElMessage.success('检索评估完成')
     await fetchEvaluationRecords()
   } catch (error) {
-    ElMessage.error(error.message || '????????')
+    ElMessage.error(error.message || '检索评估失败')
   }
 }
 
@@ -2206,7 +2673,7 @@ const openRetrievalDetail = async (row) => {
   } catch (error) {
     retrievalCaseResults.value = []
     activeRetrievalCase.value = { caseId: '-', hits: [] }
-    ElMessage.error(error.message || '??????????')
+    ElMessage.error(error.message || '评估详情加载失败')
   }
 }
 
@@ -2227,7 +2694,7 @@ const fetchEvaluationRecords = async () => {
     evaluationRecords.value = data.items || []
     retrievalEvaluations.value = evaluationRecords.value.filter((item) => item.type === 'retrieval_eval')
   } catch (error) {
-    ElMessage.error(error.message || '????????')
+    ElMessage.error(error.message || '评估记录加载失败')
   }
 }
 
@@ -2258,7 +2725,9 @@ onMounted(() => {
   fetchKeywordRules()
   fetchTermNormalizations()
   fetchKBs()
+  fetchKbVersionOptions()
   fetchEvaluationDatasets()
+  fetchAllEvaluationSamples()
   fetchEvaluationRecords()
 })
 </script>
@@ -2815,6 +3284,81 @@ onMounted(() => {
   color: #4e5969;
 }
 
+
+.sample-dialog-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.sample-dialog-toolbar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sample-dialog-toolbar strong {
+  color: #1d2129;
+}
+
+.sample-dialog-toolbar span {
+  color: #86909c;
+  overflow-wrap: anywhere;
+}
+
+.sample-dialog-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.sample-import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.sample-import-panel {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+}
+
+.sample-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sample-import-head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #1d2129;
+}
+
+.single-sample-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.single-sample-form :deep(.el-form-item:nth-child(2)) {
+  grid-column: 1 / -1;
+}
+
+.sample-panel-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 @media (max-width: 1100px) {
   .history-toolbar {
     flex-direction: column;

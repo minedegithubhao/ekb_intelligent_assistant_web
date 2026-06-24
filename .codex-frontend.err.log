@@ -1,0 +1,183 @@
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/dashboard/config[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/config/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/keyword-rules[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/term-normalizations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs/active[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions/pointers/current[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/tasks[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/conversations?knowledge_base_type=enterprise[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/dashboard/config[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/config/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/keyword-rules[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/term-normalizations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs/active[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions/pointers/current[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/tasks[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/dashboard/config[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/config/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/keyword-rules[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/term-normalizations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs/active[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions/pointers/current[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/tasks[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/dashboard/config[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/config/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/keyword-rules[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/term-normalizations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs/active[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions/pointers/current[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/tasks[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/dashboard/config[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/config/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations/users[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/conversations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/keyword-rules[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/retrieval/term-normalizations[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/configs/active[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/kb/versions/pointers/current[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)
+[2m20:12:33[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/offline-ingestion/tasks[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1705:16)

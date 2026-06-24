@@ -49,16 +49,6 @@
           <el-button v-if="isAdmin" type="primary" plain size="small" @click="goAdmin">
             返回管理端
           </el-button>
-          <el-select
-            v-if="isAdmin"
-            v-model="knowledgeBaseType"
-            class="knowledge-select"
-            size="small"
-            @change="handleKnowledgeBaseChange"
-          >
-            <el-option label="企业知识库" value="enterprise" />
-            <el-option label="个人知识库" value="personal" />
-          </el-select>
           <el-button plain type="danger" size="small" :icon="SwitchButton" @click="handleLogout">
             退出登录
           </el-button>
@@ -78,7 +68,64 @@
           </div>
           <div class="message-bubble">
             <div class="message-role">{{ message.role === 'assistant' ? '助手' : '我' }}</div>
-            <p>{{ message.content }}</p>
+            <div v-if="message.role === 'assistant'" class="assistant-answer">
+              <div v-if="message.pending" class="pending-line">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span>{{ message.progressLabel || '正在处理问题...' }}</span>
+              </div>
+              <div v-if="message.content" class="markdown-body" v-html="renderMarkdown(message.content)" />
+            </div>
+            <p v-else>{{ message.content }}</p>
+            <div
+              v-if="message.role === 'assistant' && shouldShowAssistantMeta(message)"
+              class="message-sources"
+            >
+              <div v-if="message.metadata?.judgement || message.hitType" class="message-judgement">
+                判断结果：{{ message.metadata?.judgement || judgementText(message.hitType) }}
+              </div>
+              <div v-if="message.metadata?.elapsed_ms !== undefined" class="message-elapsed">
+                耗时：{{ formatElapsed(message.metadata.elapsed_ms) }}
+              </div>
+              <div
+                v-for="(source, index) in message.sources"
+                :key="`${message.id}-${index}`"
+                class="source-line"
+              >
+                <span class="source-index">来源{{ index + 1 }}：</span>
+                <a
+                  v-if="source.reference_source"
+                  :href="source.reference_source"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="source-title"
+                >
+                  {{ sourceTitle(source) }}
+                </a>
+                <span v-else class="source-title">{{ sourceTitle(source) }}</span>
+                <span class="source-separator">|</span>
+                <span>置信度：{{ formatConfidence(source.confidence) }}</span>
+                <span class="source-separator">|</span>
+                <span>文档ID：{{ sourceDocId(source) }}</span>
+              </div>
+              <el-collapse v-if="message.metadata?.retrieval_flow?.length" class="flow-collapse">
+                <el-collapse-item title="检索流程数据" :name="`flow-${message.id}`">
+                  <div
+                    v-for="(step, index) in message.metadata.retrieval_flow"
+                    :key="`${message.id}-flow-${index}`"
+                    class="flow-line"
+                  >
+                    <span>{{ index + 1 }}. {{ step.label || step.stage }}</span>
+                    <span>{{ statusText(step.status) }}</span>
+                    <span v-if="step.elapsed_ms !== undefined">{{ formatElapsed(step.elapsed_ms) }}</span>
+                    <span v-if="step.judgement">判断：{{ step.judgement }}</span>
+                    <span v-if="step.candidate_count !== undefined">候选：{{ step.candidate_count }}</span>
+                    <span v-if="step.evidence_count !== undefined">证据：{{ step.evidence_count }}</span>
+                    <span v-if="step.best_confidence !== undefined">最高置信度：{{ formatConfidence(step.best_confidence) }}</span>
+                    <span v-if="step.reason">说明：{{ step.reason }}</span>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
           </div>
         </div>
         <el-empty
@@ -92,23 +139,39 @@
       </section>
 
       <footer class="composer">
-        <el-input
-          v-model="question"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-          resize="none"
-          placeholder="输入你的问题，例如：企业店保证金怎么收取？"
-          @keydown.enter.exact.prevent="sendQuestion"
-        />
-        <el-button
-          type="primary"
-          :icon="Promotion"
-          :loading="questionSending"
-          :disabled="!question.trim()"
-          @click="sendQuestion"
-        >
-          发送
-        </el-button>
+        <div class="composer-toolbar">
+          <span class="composer-label">提问知识库</span>
+          <el-select
+            v-if="isAdmin"
+            v-model="knowledgeBaseType"
+            class="knowledge-select"
+            size="small"
+            @change="handleKnowledgeBaseChange"
+          >
+            <el-option label="企业知识库" value="enterprise" />
+            <el-option label="个人知识库" value="personal" />
+          </el-select>
+          <el-tag v-else type="primary" effect="plain">{{ activeKnowledgeBaseName }}</el-tag>
+        </div>
+        <div class="composer-input-row">
+          <el-input
+            v-model="question"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            resize="none"
+            placeholder="输入你的问题，例如：企业店保证金怎么收取？"
+            @keydown.enter.exact.prevent="sendQuestion"
+          />
+          <el-button
+            type="primary"
+            :icon="Promotion"
+            :loading="questionSending"
+            :disabled="!question.trim()"
+            @click="sendQuestion"
+          >
+            发送
+          </el-button>
+        </div>
       </footer>
     </main>
   </div>
@@ -118,13 +181,14 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Promotion, Search, Service, SwitchButton, User } from '@element-plus/icons-vue'
+import { Loading, Plus, Promotion, Search, Service, SwitchButton, User } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 import {
   createConversation as createConversationApi,
   deleteConversation,
   getConversationMessages,
   getConversations,
-  sendConversationMessage
+  streamConversationMessage
 } from '@/api/conversation'
 import { logout } from '@/api/auth'
 import { clearAuthSession } from '@/utils/authSession'
@@ -146,6 +210,17 @@ const conversationLoading = ref(false)
 const conversationCreating = ref(false)
 const messageLoading = ref(false)
 const questionSending = ref(false)
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true
+})
+const defaultLinkOpen = markdown.renderer.rules.link_open || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('target', '_blank')
+  tokens[idx].attrSet('rel', 'noopener noreferrer')
+  return defaultLinkOpen(tokens, idx, options, env, self)
+}
 
 const activeKnowledgeBaseName = computed(() => knowledgeBaseNames[knowledgeBaseType.value] || '未配置')
 
@@ -194,6 +269,57 @@ const formatDateTime = (value) => {
   return date.toLocaleString()
 }
 
+const formatElapsed = (value) => {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  return `${(number / 1000).toFixed(2)} 秒`
+}
+
+const formatConfidence = (value) => {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  return `${(number * 100).toFixed(2)}%`
+}
+
+const renderMarkdown = (value) => markdown.render(value || '')
+
+const statusText = (status) => {
+  const map = {
+    running: '处理中',
+    completed: '完成',
+    skipped: '跳过',
+    failed: '失败'
+  }
+  return map[status] || status || '-'
+}
+
+const judgementText = (hitType) => {
+  const map = {
+    rule_greeting: '问候语',
+    rule_human_transfer: '请求人工',
+    rule_out_of_scope: '越界问题',
+    faq_fast: 'FAQ快速匹配',
+    faq_high: 'FAQ高置信匹配',
+    faq_middle_doc: 'FAQ中置信+文档混合检索',
+    doc: '文档混合检索',
+    none: '未命中',
+    retrieval_error: '检索异常'
+  }
+  return map[hitType] || hitType || '-'
+}
+
+const shouldShowAssistantMeta = (message) => Boolean(
+  message.metadata?.judgement ||
+  message.hitType ||
+  message.metadata?.elapsed_ms !== undefined ||
+  message.sources?.length ||
+  message.metadata?.retrieval_flow?.length
+)
+
+const sourceTitle = (source) => source.title || source.id || source.source_doc_id || '未命名来源'
+
+const sourceDocId = (source) => source.source_doc_id || source.id || '-'
+
 const normalizeConversation = (item) => ({
   id: item.conversation_id,
   title: item.title || '新会话',
@@ -208,6 +334,22 @@ const normalizeMessage = (item) => ({
   content: item.content,
   sources: item.sources || [],
   metadata: item.metadata || {},
+  hitType: item.hit_type || item.metadata?.hit_type,
+  pending: false,
+  progressLabel: '',
+  createdAt: item.created_at
+})
+
+const normalizeStreamAnswer = (item) => ({
+  id: item.message_id,
+  conversationId: item.conversation_id,
+  role: 'assistant',
+  content: item.answer,
+  sources: item.sources || [],
+  metadata: item.metadata || {},
+  hitType: item.hit_type || item.metadata?.hit_type,
+  pending: false,
+  progressLabel: '',
   createdAt: item.created_at
 })
 
@@ -297,6 +439,19 @@ const ensureActiveConversation = async () => {
   return activeConversationId.value
 }
 
+const replaceLocalMessage = (conversationId, messageId, nextMessage) => {
+  const list = messages.value[conversationId] || []
+  messages.value[conversationId] = list.map((item) => (item.id === messageId ? nextMessage : item))
+}
+
+const patchLocalMessage = (conversationId, messageId, patcher) => {
+  const list = messages.value[conversationId] || []
+  messages.value[conversationId] = list.map((item) => {
+    if (item.id !== messageId) return item
+    return patcher(item)
+  })
+}
+
 const sendQuestion = async () => {
   const content = question.value.trim()
   if (!content) return
@@ -304,14 +459,82 @@ const sendQuestion = async () => {
   try {
     const conversationId = await ensureActiveConversation()
     if (!conversationId) return
-    await sendConversationMessage(conversationId, {
+    question.value = ''
+
+    const userMessage = {
+      id: `local-user-${Date.now()}`,
+      conversationId,
+      role: 'user',
+      content,
+      sources: [],
+      metadata: {},
+      pending: false,
+      createdAt: new Date().toISOString()
+    }
+    const assistantTempId = `local-assistant-${Date.now()}`
+    const assistantMessage = {
+      id: assistantTempId,
+      conversationId,
+      role: 'assistant',
+      content: '',
+      sources: [],
+      metadata: {
+        retrieval_flow: []
+      },
+      hitType: '',
+      pending: true,
+      progressLabel: '正在准备处理...'
+    }
+    messages.value[conversationId] = [
+      ...(messages.value[conversationId] || []),
+      userMessage,
+      assistantMessage
+    ]
+    scrollToBottom()
+
+    await streamConversationMessage(conversationId, {
       question: content,
       knowledge_base_type: knowledgeBaseType.value
+    }, {
+      onProgress: (step) => {
+        patchLocalMessage(conversationId, assistantTempId, (item) => ({
+          ...item,
+          progressLabel: `${step.label || '处理中'}：${statusText(step.status)}`,
+          metadata: {
+            ...(item.metadata || {}),
+            retrieval_flow: [
+              ...((item.metadata || {}).retrieval_flow || []),
+              step
+            ]
+          },
+          hitType: step.hit_type || item.hitType
+        }))
+        scrollToBottom()
+      },
+      onFinal: (data) => {
+        replaceLocalMessage(conversationId, assistantTempId, normalizeStreamAnswer(data))
+      },
+      onError: (data) => {
+        replaceLocalMessage(conversationId, assistantTempId, {
+          id: assistantTempId,
+          conversationId,
+          role: 'assistant',
+          content: data.message || '当前知识库检索暂时不可用，请稍后再试。',
+          sources: [],
+          metadata: {
+            elapsed_ms: data.elapsed_ms,
+            judgement: '检索异常',
+            retrieval_flow: data.stage ? [data] : []
+          },
+          hitType: 'retrieval_error',
+          pending: false,
+          progressLabel: ''
+        })
+      }
     })
-    question.value = ''
-    await fetchMessages(conversationId)
     await fetchConversations()
     activeConversationId.value = conversationId
+    scrollToBottom()
   } catch (error) {
     ElMessage.error(error.message || '问题发送失败')
   } finally {
@@ -339,7 +562,8 @@ onMounted(fetchConversations)
 .chat-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   color: #1d2129;
   background: #f5f7fb;
 }
@@ -348,7 +572,9 @@ onMounted(fetchConversations)
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
   padding: 22px;
+  overflow: hidden;
   background: #ffffff;
   border-right: 1px solid #e5e8ef;
 }
@@ -430,7 +656,9 @@ onMounted(fetchConversations)
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -457,6 +685,7 @@ onMounted(fetchConversations)
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
   padding: 28px;
   overflow-y: auto;
 }
@@ -520,19 +749,150 @@ onMounted(fetchConversations)
   line-height: 1.7;
 }
 
+.assistant-answer {
+  min-width: 0;
+}
+
+.pending-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 14px;
+  color: #4e5969;
+}
+
+.markdown-body {
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1d2129;
+}
+
+.markdown-body :deep(p) {
+  margin: 0 0 10px;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.markdown-body :deep(code) {
+  padding: 2px 5px;
+  font-size: 12px;
+  background: #f2f3f5;
+  border-radius: 4px;
+}
+
+.markdown-body :deep(pre) {
+  padding: 10px 12px;
+  overflow: auto;
+  background: #f2f3f5;
+  border-radius: 8px;
+}
+
+.markdown-body :deep(a) {
+  color: #2362fb;
+  text-decoration: none;
+}
+
+.message-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4e5969;
+  border-top: 1px solid #edf0f5;
+}
+
+.message-elapsed {
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.message-judgement {
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.source-line {
+  overflow-wrap: anywhere;
+}
+
+.source-index {
+  font-weight: 600;
+  color: #2362fb;
+}
+
+.source-title {
+  color: #1d2129;
+  text-decoration: none;
+}
+
+a.source-title:hover {
+  color: #2362fb;
+  text-decoration: underline;
+}
+
+.source-separator {
+  margin: 0 6px;
+  color: #c9cdd4;
+}
+
 .composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   padding: 18px 28px 24px;
   background: #ffffff;
   border-top: 1px solid #e5e8ef;
 }
 
-.composer .el-button {
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.composer-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4e5969;
+}
+
+.composer-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.composer-input-row .el-button {
   align-self: end;
   height: 40px;
   border-radius: 8px;
+}
+
+.flow-collapse {
+  margin-top: 4px;
+  border-top: 1px solid #edf0f5;
+  border-bottom: none;
+}
+
+.flow-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 4px 0;
+  color: #4e5969;
 }
 
 :deep(.el-input__wrapper),

@@ -407,9 +407,9 @@
         <h3>知识库版本</h3>
         <el-table :data="kbList" v-loading="offlineLoading" style="width: 100%">
           <el-table-column prop="kb_version" label="版本号" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="type" label="状态" width="110">
+          <el-table-column prop="status" label="状态" width="110">
             <template #default="scope">
-              <el-tag :type="getKbTagType(scope.row.type)" size="small">{{ scope.row.type }}</el-tag>
+              <el-tag :type="getKbTagType(scope.row.status)" size="small">{{ scope.row.status }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="embedding_model" label="Embedding" width="130" />
@@ -435,11 +435,11 @@
           <el-table-column prop="created_at" label="创建时间" width="180" />
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="scope">
-              <el-button v-if="scope.row.type === 'staged'" link type="primary" @click="openVersionIngestion(scope.row)">
+              <el-button v-if="scope.row.status === 'staged'" link type="primary" @click="openVersionIngestion(scope.row)">
                 入库
               </el-button>
               <el-button
-                v-if="scope.row.type === 'staged'"
+                v-if="scope.row.status === 'staged'"
                 link
                 type="primary"
                 :disabled="!isKbVersionReady(scope.row)"
@@ -447,10 +447,10 @@
               >
                 发布
               </el-button>
-              <el-button v-if="scope.row.type === 'archived'" link type="warning" @click="rollbackVersion(scope.row)">
+              <el-button v-if="scope.row.status === 'archived'" link type="warning" @click="rollbackVersion(scope.row)">
                 回滚
               </el-button>
-              <span v-if="scope.row.type === 'active'">当前</span>
+              <span v-if="scope.row.status === 'active'">当前</span>
             </template>
           </el-table-column>
         </el-table>
@@ -2103,7 +2103,7 @@ const createKnowledgeVersion = async () => {
 }
 
 const openVersionIngestion = (row) => {
-  if (!row || row.type !== 'staged') {
+  if (!row || row.status !== 'staged') {
     ElMessage.warning('只能向 staged 版本入库')
     return
   }

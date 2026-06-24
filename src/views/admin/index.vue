@@ -846,12 +846,22 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="jsonImportVisible" title="JSON 入库" width="520px">
+    <el-dialog
+      v-model="jsonImportVisible"
+      title="JSON 入库"
+      width="760px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      @closed="resetJsonImport"
+    >
       <el-form :model="jsonImportForm" label-position="top">
-        <el-form-item label="知识库名称" required>
-          <el-input v-model="jsonImportForm.name" placeholder="请输入知识库名称" />
+        <el-form-item label="入库类型" required>
+          <el-radio-group v-model="jsonImportForm.recordType">
+            <el-radio value="faq">FAQ 向量库</el-radio>
+            <el-radio value="doc">文档向量库</el-radio>
+          </el-radio-group>
         </el-form-item>
-        <el-form-item label="文档上传" required>
+        <el-form-item label="JSON 文件" required>
           <el-upload
             v-model:file-list="jsonImportFiles"
             class="upload-drag"
@@ -859,6 +869,7 @@
             action="#"
             :auto-upload="false"
             accept=".json"
+            multiple
             :on-change="handleJsonFileChange"
             :on-remove="handleJsonFileRemove"
           >
@@ -866,15 +877,78 @@
             <div class="el-upload__text">将 JSON 文件拖到此处，或 <em>点击上传</em></div>
             <template #tip>
               <div class="el-upload__tip">
-                当前仅开放前端入口，后端 JSON 入库接口待接入。
+                支持多文件；FAQ 写入 faq_collection_dev_sample，文档写入 doc_collection_dev_sample。
               </div>
             </template>
           </el-upload>
         </el-form-item>
       </el-form>
+
+      <div v-if="jsonImportLoading || jsonImportProgressRows.length" class="json-import-progress">
+        <div class="json-import-progress-head">
+          <span>入库进度</span>
+          <span>{{ jsonImportProgress.current }} / {{ jsonImportProgress.total }}</span>
+        </div>
+        <el-progress
+          :percentage="jsonImportProgress.percent"
+          :status="getJsonImportProgressStatus()"
+          :stroke-width="10"
+        />
+        <div v-if="jsonImportProgress.currentFile" class="json-import-current">
+          当前文件：{{ jsonImportProgress.currentFile }}
+        </div>
+        <el-table :data="jsonImportProgressRows" size="small" style="width: 100%; margin-top: 12px">
+          <el-table-column prop="file_name" label="文件名" min-width="180" show-overflow-tooltip />
+          <el-table-column label="状态" width="100" align="center">
+            <template #default="scope">
+              <el-tag :type="getJsonImportRowTagType(scope.row.status)" effect="plain">
+                {{ scope.row.status_text }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="版本" min-width="160" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ formatJsonImportVersions(scope.row.kb_versions) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_count" label="总条数" width="90" align="center" />
+          <el-table-column prop="success_count" label="成功" width="90" align="center" />
+          <el-table-column prop="failed_count" label="失败" width="90" align="center" />
+          <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
+        </el-table>
+      </div>
+
+      <div v-if="jsonImportResult" class="json-import-result">
+        <el-descriptions :column="3" border>
+          <el-descriptions-item label="Collection">{{ jsonImportResult.collection_name }}</el-descriptions-item>
+          <el-descriptions-item label="知识库版本">{{ formatJsonImportVersions(jsonImportResult.kb_versions) }}</el-descriptions-item>
+          <el-descriptions-item label="文件数">{{ jsonImportResult.total_files }}</el-descriptions-item>
+          <el-descriptions-item label="成功条数">{{ jsonImportResult.success_count }}</el-descriptions-item>
+          <el-descriptions-item label="失败条数">{{ jsonImportResult.failed_count }}</el-descriptions-item>
+          <el-descriptions-item label="成功文件">{{ jsonImportResult.success_files }}</el-descriptions-item>
+          <el-descriptions-item label="失败文件">{{ jsonImportResult.failed_files }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-table :data="jsonImportResult.file_results || []" size="small" style="width: 100%; margin-top: 14px">
+          <el-table-column prop="file_name" label="文件名" min-width="180" show-overflow-tooltip />
+          <el-table-column label="版本" min-width="160" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ formatJsonImportVersions(scope.row.kb_versions) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_count" label="总条数" width="90" align="center" />
+          <el-table-column prop="success_count" label="成功" width="90" align="center" />
+          <el-table-column prop="failed_count" label="失败" width="90" align="center" />
+          <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ formatJsonImportFailures(scope.row.failed_items) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
       <template #footer>
         <el-button @click="jsonImportVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitJsonImport">开始入库</el-button>
+        <el-button type="primary" :loading="jsonImportLoading" @click="submitJsonImport">开始入库</el-button>
       </template>
     </el-dialog>
 
@@ -904,6 +978,7 @@ import {
   updateTermNormalization
 } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
+import { importJsonVectors } from '@/api/vectorIngestJson'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
 const currentTab = ref('dashboard')
@@ -1592,6 +1667,16 @@ const kbQuery = reactive({ keyword: '', status: '' })
 const kbList = ref([])
 const kbUploadVisible = ref(false)
 const jsonImportVisible = ref(false)
+const jsonImportLoading = ref(false)
+const jsonImportResult = ref(null)
+const jsonImportProgressRows = ref([])
+const jsonImportProgress = reactive({
+  current: 0,
+  total: 0,
+  percent: 0,
+  currentFile: '',
+  hasError: false
+})
 const kbUploadFiles = ref([])
 const jsonImportFiles = ref([])
 const kbForm = reactive({
@@ -1603,7 +1688,7 @@ const kbForm = reactive({
   autoEnable: true
 })
 const jsonImportForm = reactive({
-  name: ''
+  recordType: 'faq'
 })
 const supportedDocumentExtensions = ['csv', 'md']
 
@@ -1677,6 +1762,82 @@ const handleJsonFileRemove = (_uploadFile, uploadFiles) => {
   jsonImportFiles.value = uploadFiles
 }
 
+const resetJsonImport = () => {
+  Object.assign(jsonImportForm, { recordType: 'faq' })
+  jsonImportFiles.value = []
+  jsonImportResult.value = null
+  jsonImportLoading.value = false
+  resetJsonImportProgress()
+}
+
+const resetJsonImportProgress = () => {
+  jsonImportProgressRows.value = []
+  Object.assign(jsonImportProgress, {
+    current: 0,
+    total: 0,
+    percent: 0,
+    currentFile: '',
+    hasError: false
+  })
+}
+
+const getJsonImportProgressStatus = () => {
+  if (jsonImportLoading.value) return undefined
+  if (jsonImportProgress.hasError) return 'exception'
+  if (jsonImportProgress.total > 0 && jsonImportProgress.current === jsonImportProgress.total) return 'success'
+  return undefined
+}
+
+const getJsonImportRowTagType = (status) => {
+  const maps = {
+    pending: 'info',
+    running: 'primary',
+    success: 'success',
+    failed: 'danger'
+  }
+  return maps[status] || 'info'
+}
+
+const updateJsonImportPercent = () => {
+  jsonImportProgress.percent =
+    jsonImportProgress.total > 0 ? Math.round((jsonImportProgress.current / jsonImportProgress.total) * 100) : 0
+}
+
+const buildJsonImportSummary = (fileResults, recordType) => {
+  const collectionName = recordType === 'faq' ? 'faq_collection_dev_sample' : 'doc_collection_dev_sample'
+  const successFiles = fileResults.filter((item) => item.status === 'success').length
+  const failedFiles = fileResults.filter((item) => item.status === 'failed').length
+
+  return {
+    record_type: recordType,
+    collection_name: fileResults.find((item) => item.collection_name)?.collection_name || collectionName,
+    total_files: fileResults.length,
+    success_files: successFiles,
+    failed_files: failedFiles,
+    kb_versions: Array.from(new Set(fileResults.flatMap((item) => item.kb_versions || []))),
+    total_count: fileResults.reduce((sum, item) => sum + Number(item.total_count || 0), 0),
+    success_count: fileResults.reduce((sum, item) => sum + Number(item.success_count || 0), 0),
+    failed_count: fileResults.reduce((sum, item) => sum + Number(item.failed_count || 0), 0),
+    file_results: fileResults
+  }
+}
+
+const formatJsonImportVersions = (versions = []) => {
+  if (!versions.length) return '-'
+  return versions.join('，')
+}
+
+const formatJsonImportFailures = (failedItems = []) => {
+  if (!failedItems.length) return '-'
+  return failedItems
+    .slice(0, 3)
+    .map((item) => {
+      const position = item.index >= 0 ? `第 ${item.index + 1} 条` : '文件'
+      return `${position}${item.pk ? `(${item.pk})` : ''}: ${item.reason}`
+    })
+    .join('；')
+}
+
 const submitKbUpload = () => {
   if (!kbForm.ingestionType) {
     ElMessage.error('请选择入库方式')
@@ -1696,9 +1857,9 @@ const submitKbUpload = () => {
   fetchKBs()
 }
 
-const submitJsonImport = () => {
-  if (!jsonImportForm.name.trim()) {
-    ElMessage.error('请输入知识库名称')
+const submitJsonImport = async () => {
+  if (!jsonImportForm.recordType) {
+    ElMessage.error('请选择入库类型')
     return
   }
 
@@ -1712,8 +1873,93 @@ const submitJsonImport = () => {
     return
   }
 
-  // TODO: connect JSON knowledge base import API when backend contract is ready.
-  ElMessage.info('JSON 入库接口待后端接入')
+  const uploadItems = jsonImportFiles.value
+    .map((file) => ({ name: file.name, raw: file.raw }))
+    .filter((file) => file.raw)
+  if (uploadItems.length === 0) {
+    ElMessage.error('未读取到可上传的 JSON 文件')
+    return
+  }
+
+  jsonImportLoading.value = true
+  jsonImportResult.value = null
+  resetJsonImportProgress()
+  jsonImportProgress.total = uploadItems.length
+  jsonImportProgressRows.value = uploadItems.map((file) => ({
+    file_name: file.name,
+    status: 'pending',
+    status_text: '等待中',
+    total_count: 0,
+    success_count: 0,
+    failed_count: 0,
+    failed_items: [],
+    kb_versions: [],
+    message: '-'
+  }))
+
+  try {
+    for (let index = 0; index < uploadItems.length; index += 1) {
+      const item = uploadItems[index]
+      const row = jsonImportProgressRows.value[index]
+      jsonImportProgress.currentFile = item.name
+      Object.assign(row, {
+        status: 'running',
+        status_text: '入库中',
+        message: '正在上传并写入向量库'
+      })
+
+      try {
+        const result = await importJsonVectors({
+          recordType: jsonImportForm.recordType,
+          files: [item.raw]
+        })
+        const fileResult = result.file_results?.[0] || {}
+        const failedCount = Number(result.failed_count || fileResult.failed_count || 0)
+        Object.assign(row, {
+          ...fileResult,
+          collection_name: result.collection_name,
+          file_name: fileResult.file_name || item.name,
+          status: failedCount > 0 ? 'failed' : 'success',
+          status_text: failedCount > 0 ? '有失败' : '成功',
+          kb_versions: fileResult.kb_versions || result.kb_versions || [],
+          total_count: Number(fileResult.total_count || result.total_count || 0),
+          success_count: Number(fileResult.success_count || result.success_count || 0),
+          failed_count: failedCount,
+          failed_items: fileResult.failed_items || result.failed_items || [],
+          message: failedCount > 0 ? formatJsonImportFailures(fileResult.failed_items || result.failed_items || []) : '入库完成'
+        })
+      } catch (error) {
+        jsonImportProgress.hasError = true
+        Object.assign(row, {
+          status: 'failed',
+          status_text: '失败',
+          total_count: 1,
+          success_count: 0,
+          failed_count: 1,
+          failed_items: [{ index: -1, pk: '', reason: error.message || 'JSON 入库失败' }],
+          kb_versions: [],
+          message: error.message || 'JSON 入库失败'
+        })
+      } finally {
+        jsonImportProgress.current = index + 1
+        updateJsonImportPercent()
+      }
+    }
+
+    const summary = buildJsonImportSummary(jsonImportProgressRows.value, jsonImportForm.recordType)
+    jsonImportResult.value = summary
+    if (summary.failed_count > 0 || summary.failed_files > 0) {
+      ElMessage.warning(`入库完成，成功 ${summary.success_count} 条，失败 ${summary.failed_count} 条`)
+    } else {
+      ElMessage.success(`入库成功，共 ${summary.success_count} 条`)
+    }
+  } catch (error) {
+    jsonImportProgress.hasError = true
+    ElMessage.error(error.message || 'JSON 入库失败')
+  } finally {
+    jsonImportLoading.value = false
+    jsonImportProgress.currentFile = ''
+  }
 }
 
 const deleteKB = (id) => {
@@ -2514,6 +2760,36 @@ onMounted(() => {
 
 .upload-drag {
   width: 100%;
+}
+
+.json-import-result {
+  padding-top: 14px;
+  margin-top: 16px;
+  border-top: 1px solid #edf0f5;
+}
+
+.json-import-progress {
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px solid #e8edf5;
+  border-radius: 6px;
+}
+
+.json-import-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.json-import-current {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #4e5969;
 }
 
 @media (max-width: 1100px) {

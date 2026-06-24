@@ -578,7 +578,7 @@
               <el-option label="入库质量" value="ingestion" />
             </el-select>
             <el-select v-model="recordQuery.status" placeholder="任务状态" class="filter-item" clearable>
-              <el-option label="completed" value="completed" />
+              <el-option label="success" value="success" />
               <el-option label="running" value="running" />
               <el-option label="failed" value="failed" />
             </el-select>
@@ -590,7 +590,7 @@
             <el-table-column prop="taskId" label="任务ID" min-width="170" />
             <el-table-column label="评估类型" width="120">
               <template #default="scope">
-                <el-tag :type="scope.row.type === 'retrieval' ? 'primary' : 'warning'" effect="plain">
+                <el-tag :type="scope.row.type === 'retrieval_eval' ? 'primary' : 'warning'" effect="plain">
                   {{ scope.row.typeName }}
                 </el-tag>
               </template>
@@ -978,6 +978,17 @@ import {
   updateTermNormalization
 } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
+import {
+  createEvaluationDataset,
+  createIngestionQualityRun,
+  createRetrievalRun,
+  deleteEvaluationDataset,
+  getEvaluationCases,
+  getEvaluationDatasets,
+  getEvaluationRunCases,
+  getEvaluationRuns,
+  importEvaluationCases
+} from '@/api/adminEvaluation'
 import { importJsonVectors } from '@/api/vectorIngestJson'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 
@@ -1972,7 +1983,7 @@ const deleteKB = (id) => {
 }
 
 const getEvalTagType = (status) => {
-  const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
+  const maps = { pending: 'info', running: 'primary', success: 'success', failed: 'danger' }
   return maps[status] || 'info'
 }
 
@@ -1985,26 +1996,11 @@ const evaluationTabs = [
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
 const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
-const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
+const retrievalForm = reactive({ datasetId: '', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
 const activeRetrievalDetail = ref(null)
 
-const evaluationDatasets = ref([
-  {
-    datasetId: 'jd_rules_retrieval_v1',
-    name: '京东规则检索评估集',
-    type: 'retrieval_eval',
-    sampleCount: 86,
-    createdAt: '2026-06-23 10:00'
-  },
-  {
-    datasetId: 'jd_rules_mixed_v1',
-    name: '京东规则综合评估集',
-    type: 'mixed',
-    sampleCount: 128,
-    createdAt: '2026-06-22 18:30'
-  }
-])
+const evaluationDatasets = ref([])
 
 const filteredEvaluationDatasets = computed(() => {
   const keyword = datasetQuery.keyword.trim()
@@ -2016,139 +2012,21 @@ const filteredEvaluationDatasets = computed(() => {
 })
 
 const ingestionMetrics = reactive({
-  totalChunks: '12,000',
-  lowQualityChunks: '340',
-  tooShortRate: '4.0%',
-  duplicateRate: '2.0%'
+  totalChunks: '0',
+  lowQualityChunks: '0',
+  tooShortRate: '0',
+  duplicateRate: '0'
 })
 
-const problemChunks = ref([
-  {
-    chunkId: 'chunk_001',
-    ruleId: '923540006109319168',
-    title: '个人/个体合规管理规则',
-    length: 28,
-    issueType: '过短',
-    similarity: '-'
-  },
-  {
-    chunkId: 'chunk_088',
-    ruleId: '1076394019191394304',
-    title: '质保期服务规则',
-    length: 2500,
-    issueType: '过长',
-    similarity: '-'
-  },
-  {
-    chunkId: 'chunk_010',
-    ruleId: '880256294462820352',
-    title: '经营类目商品阈值明细表',
-    length: 820,
-    issueType: '重复',
-    similarity: '0.98'
-  }
-])
+const problemChunks = ref([])
 
-const retrievalEvaluations = ref([
-  {
-    taskId: 'retrieval_eval_001',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    faqHitAt5: '81.25%',
-    kbRecallAt10: '86.67%',
-    kbMrrAt10: '0.742',
-    errorCount: 1
-  },
-  {
-    taskId: 'retrieval_eval_002',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v2',
-    status: 'running',
-    faqHitAt5: '',
-    kbRecallAt10: '',
-    kbMrrAt10: '',
-    errorCount: 0
-  }
-])
+const retrievalEvaluations = ref([])
 
-const retrievalCaseResults = ref([
-  {
-    caseId: 'eval_0001',
-    question: '个人/个体店出售假冒商品怎么处理？',
-    rewrittenQuestion: '个人个体店 出售假冒商品 处罚',
-    expectedRuleId: '923540006109319168',
-    faqHit: 1,
-    kbRecall: 1,
-    kbRr: 1,
-    hits: [
-      { id: 'faq_001', title: 'FAQ #1 faq_001', score: '0.93', preview: '个人/个体店出售假冒商品怎么处理？' },
-      {
-        id: 'kb_001',
-        title: 'KB #1 个人/个体合规管理规则',
-        score: '0.88',
-        preview: '出售假冒商品的，平台可采取全店商品下架、永久禁止发布新商品、违约金、店铺清退等处理措施...'
-      }
-    ]
-  },
-  {
-    caseId: 'eval_0018',
-    question: 'SSD 固态硬盘最低质保多久？',
-    rewrittenQuestion: 'SSD 固态硬盘 最低质保 周期',
-    expectedRuleId: '1076394019191394304',
-    faqHit: 0,
-    kbRecall: 1,
-    kbRr: 0.5,
-    hits: [
-      { id: 'kb_018', title: 'KB #1 质保期服务规则', score: '0.79', preview: '不同类目商品的质保周期以平台规则和商品详情页承诺为准...' }
-    ]
-  },
-  {
-    caseId: 'eval_0031',
-    question: '宠物健康类目需要什么资质？',
-    rewrittenQuestion: '宠物健康 类目 入驻 资质',
-    expectedRuleId: '880256294462820352',
-    faqHit: 0,
-    kbRecall: 0,
-    kbRr: 0,
-    hits: []
-  }
-])
+const retrievalCaseResults = ref([])
 
-const activeRetrievalCase = ref(retrievalCaseResults.value[0])
+const activeRetrievalCase = ref({ caseId: '-', hits: [] })
 
-const evaluationRecords = ref([
-  {
-    taskId: 'retrieval_eval_001',
-    type: 'retrieval',
-    typeName: '检索评估',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    metrics: 'FAQ Hit@5 81.25% / KB Recall@10 86.67% / MRR 0.742',
-    finishedAt: '2026-06-23 10:05'
-  },
-  {
-    taskId: 'ingest_eval_014',
-    type: 'ingestion',
-    typeName: '入库质量',
-    datasetId: '-',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    metrics: '低质量 340 / 过短率 4.0% / 过长率 3.0% / 重复率 2.0%',
-    finishedAt: '2026-06-23 09:40'
-  },
-  {
-    taskId: 'retrieval_eval_002',
-    type: 'retrieval',
-    typeName: '检索评估',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v2',
-    status: 'running',
-    metrics: '-',
-    finishedAt: '-'
-  }
-])
+const evaluationRecords = ref([])
 
 const filteredEvaluationRecords = computed(() => {
   const keyword = recordQuery.keyword.trim()
@@ -2161,69 +2039,214 @@ const filteredEvaluationRecords = computed(() => {
   })
 })
 
-const fetchEvaluationDatasets = () => {
-  // TODO: replace mock data with backend API when evaluation dataset endpoints are ready.
-  ElMessage.success('评估集列表已刷新')
+const defaultEvaluationCases = [
+  {
+    case_id: 'eval_0001',
+    question: '??/??????????????',
+    expected_json: {
+      expected_faq_ids: ['faq_001'],
+      expected_rule_ids: ['923540006109319168']
+    },
+    category: 'policy_fact'
+  },
+  {
+    case_id: 'eval_0002',
+    question: 'SSD ???????????',
+    expected_json: {
+      expected_faq_ids: [],
+      expected_rule_ids: ['1076394019191394304']
+    },
+    category: 'table_lookup'
+  },
+  {
+    case_id: 'eval_0003',
+    question: '?????????????',
+    expected_json: {
+      expected_faq_ids: ['faq_003'],
+      expected_rule_ids: ['880256294462820352']
+    },
+    category: 'policy_fact'
+  }
+]
+
+const toNumberOrNull = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
-const createEvalDataset = () => {
-  // TODO: open dataset creation dialog after backend contract is finalized.
-  ElMessage.info('新建评估集接口待后端接入')
+const applyIngestionRun = (run) => {
+  const summary = run.summary || {}
+  const detail = run.detail || {}
+  ingestionMetrics.totalChunks = String(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
+  ingestionMetrics.lowQualityChunks = String(summary.low_quality_issue_count ?? detail.chunk_metrics?.low_quality_issue_count ?? 0)
+  ingestionMetrics.tooShortRate = String(summary.too_short_chunk_rate ?? detail.chunk_metrics?.too_short_chunk_rate ?? 0)
+  ingestionMetrics.duplicateRate = String(summary.duplicate_group_count ?? detail.chunk_metrics?.duplicate_group_count ?? 0)
+  problemChunks.value = (detail.low_quality_issues || []).slice(0, 100).map((item) => ({
+    chunkId: item.chunk_id,
+    ruleId: item.document_id || '-',
+    title: item.reason,
+    length: item.text_length,
+    issueType: item.issue_type,
+    similarity: item.unique_ratio ?? item.duplicate_hash ?? '-'
+  }))
 }
 
-const importEvalSamples = () => {
-  // TODO: connect sample import/upload API.
-  ElMessage.info('样本导入接口待后端接入')
+const fetchEvaluationDatasets = async () => {
+  try {
+    const data = await getEvaluationDatasets({ keyword: datasetQuery.keyword, evaluationType: datasetQuery.type })
+    evaluationDatasets.value = data.items || []
+    if (!retrievalForm.datasetId && evaluationDatasets.value.length) {
+      retrievalForm.datasetId = evaluationDatasets.value[0].datasetId
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '?????????')
+  }
 }
 
-const viewDatasetSamples = (row) => {
-  // TODO: connect dataset sample list API.
-  ElMessage.info(`查看 ${row.datasetId} 样本接口待后端接入`)
+const createEvalDataset = async () => {
+  try {
+    const { value } = await ElMessageBox.prompt('??????ID', '?????', {
+      confirmButtonText: '??',
+      cancelButtonText: '??',
+      inputPattern: /^[a-zA-Z0-9_-]{1,64}$/,
+      inputErrorMessage: '????????????????'
+    })
+    await createEvaluationDataset({
+      dataset_id: value,
+      name: value,
+      evaluation_type: 'retrieval_eval',
+      description: '??????????'
+    })
+    ElMessage.success('??????')
+    await fetchEvaluationDatasets()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '???????')
+  }
 }
 
-const deleteEvalDataset = (row) => {
-  // TODO: connect dataset delete API.
-  ElMessage.warning(`删除评估集 ${row.datasetId} 接口待后端接入`)
+const importEvalSamples = async (row) => {
+  const datasetId = row?.datasetId || retrievalForm.datasetId
+  if (!datasetId) {
+    ElMessage.warning('???????')
+    return
+  }
+  try {
+    await importEvaluationCases(datasetId, { overwrite: true, items: defaultEvaluationCases })
+    ElMessage.success('?????????')
+    await fetchEvaluationDatasets()
+  } catch (error) {
+    ElMessage.error(error.message || '??????')
+  }
 }
 
-const runIngestionEvaluation = () => {
-  // TODO: connect ingestion quality evaluation API.
-  ElMessage.success('已生成入库质量评估演示结果')
+const viewDatasetSamples = async (row) => {
+  try {
+    const data = await getEvaluationCases(row.datasetId)
+    ElMessage.success(`${row.datasetId} ???? ${data.total || 0} ???`)
+  } catch (error) {
+    ElMessage.error(error.message || '????????')
+  }
 }
 
-const createRetrievalEvaluation = () => {
-  // TODO: connect retrieval evaluation task API.
-  ElMessage.success('已创建检索评估演示任务')
+const deleteEvalDataset = async (row) => {
+  try {
+    await ElMessageBox.confirm(`??????? ${row.datasetId}?`, '?????', { type: 'warning' })
+    await deleteEvaluationDataset(row.datasetId)
+    ElMessage.success('??????')
+    await fetchEvaluationDatasets()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '???????')
+  }
 }
 
-const openRetrievalDetail = (row) => {
+const runIngestionEvaluation = async () => {
+  try {
+    const run = await createIngestionQualityRun({
+      dataset: 'enterprise',
+      knowledge_base_version: ingestionForm.kbVersion,
+      min_length: toNumberOrNull(ingestionForm.minLength),
+      max_length: toNumberOrNull(ingestionForm.maxLength),
+      duplicate_threshold: toNumberOrNull(ingestionForm.duplicateThreshold)
+    })
+    applyIngestionRun(run)
+    ElMessage.success('?????????')
+    await fetchEvaluationRecords()
+  } catch (error) {
+    ElMessage.error(error.message || '????????')
+  }
+}
+
+const createRetrievalEvaluation = async () => {
+  if (!retrievalForm.datasetId) {
+    ElMessage.warning('???????')
+    return
+  }
+  try {
+    const run = await createRetrievalRun({
+      dataset_id: retrievalForm.datasetId,
+      knowledge_base_version: retrievalForm.kbVersion,
+      faq_top_k: Number(retrievalForm.faqTopK) || 5,
+      kb_top_k: Number(retrievalForm.kbTopK) || 10,
+      mock_mode: true
+    })
+    retrievalEvaluations.value.unshift(run)
+    ElMessage.success('?????????')
+    await fetchEvaluationRecords()
+  } catch (error) {
+    ElMessage.error(error.message || '????????')
+  }
+}
+
+const openRetrievalDetail = async (row) => {
   activeRetrievalDetail.value = row
-  activeRetrievalCase.value = retrievalCaseResults.value[0]
+  try {
+    const data = await getEvaluationRunCases(row.runId || row.taskId)
+    retrievalCaseResults.value = data.items || []
+    activeRetrievalCase.value = retrievalCaseResults.value[0] || { caseId: '-', hits: [] }
+  } catch (error) {
+    retrievalCaseResults.value = []
+    activeRetrievalCase.value = { caseId: '-', hits: [] }
+    ElMessage.error(error.message || '??????????')
+  }
 }
 
-const rerunRetrievalEvaluation = (row) => {
-  // TODO: connect retrieval evaluation rerun API.
-  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
+const rerunRetrievalEvaluation = async (row) => {
+  retrievalForm.datasetId = row.datasetId === '-' ? retrievalForm.datasetId : row.datasetId
+  retrievalForm.kbVersion = row.kbVersion === '-' ? retrievalForm.kbVersion : row.kbVersion
+  await createRetrievalEvaluation()
 }
 
-const fetchEvaluationRecords = () => {
-  // TODO: replace mock records with backend API.
-  ElMessage.success('评估记录已刷新')
+const fetchEvaluationRecords = async () => {
+  try {
+    const data = await getEvaluationRuns({
+      evaluationType: recordQuery.type,
+      status: recordQuery.status,
+      keyword: recordQuery.keyword,
+      pageSize: 50
+    })
+    evaluationRecords.value = data.items || []
+    retrievalEvaluations.value = evaluationRecords.value.filter((item) => item.type === 'retrieval_eval')
+  } catch (error) {
+    ElMessage.error(error.message || '????????')
+  }
 }
 
-const viewEvaluationRecord = (row) => {
-  if (row.type === 'retrieval') {
+const viewEvaluationRecord = async (row) => {
+  if (row.type === 'retrieval_eval') {
     evaluationTab.value = 'retrieval'
-    const task = retrievalEvaluations.value.find((item) => item.taskId === row.taskId) || retrievalEvaluations.value[0]
-    openRetrievalDetail(task)
+    await openRetrievalDetail(row)
     return
   }
   evaluationTab.value = 'ingestion'
+  if (row.detail) applyIngestionRun(row)
 }
 
-const rerunEvaluationRecord = (row) => {
-  // TODO: connect common evaluation rerun API.
-  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
+const rerunEvaluationRecord = async (row) => {
+  if (row.type === 'retrieval_eval') {
+    await rerunRetrievalEvaluation(row)
+    return
+  }
+  await runIngestionEvaluation()
 }
 
 onMounted(() => {

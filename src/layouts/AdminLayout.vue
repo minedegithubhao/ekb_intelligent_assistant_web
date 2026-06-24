@@ -19,6 +19,10 @@
           <el-icon><ChatDotRound /></el-icon>
           <span>历史会话管理</span>
         </el-menu-item>
+        <el-menu-item index="retrievalTest">
+          <el-icon><Search /></el-icon>
+          <span>检索测试</span>
+        </el-menu-item>
         <el-menu-item index="keywordRules">
           <el-icon><Collection /></el-icon>
           <span>关键词规则匹配</span>
@@ -72,6 +76,7 @@ import {
   DataAnalysis,
   FolderOpened,
   Operation,
+  Search,
   Setting,
   SwitchButton,
   User
@@ -87,6 +92,7 @@ const menuTitleMap = {
   dashboard: '仪表台参数',
   users: '用户管理',
   history: '历史会话管理',
+  retrievalTest: '检索测试',
   keywordRules: '关键词规则匹配',
   termNormalizations: '归一化词改写配置',
   knowledge: '知识库管理',

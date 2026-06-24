@@ -20,6 +20,33 @@ function typeName(type) {
   return names[type] || type
 }
 
+
+function mapKbVersion(item) {
+  const status = item.status || '-'
+  return {
+    kbVersion: item.kb_version,
+    status,
+    faqCollectionName: item.faq_collection_name || '-',
+    docCollectionName: item.doc_collection_name || '-',
+    createdAt: formatDate(item.created_at),
+    description: item.description || '',
+    operation: item.operation || '',
+    label: `${item.kb_version} | ${status}`
+  }
+}
+function mapEvaluationCase(item) {
+  return {
+    id: item.id,
+    caseId: item.case_id,
+    datasetId: item.dataset_id,
+    datasetName: item.dataset_name || '',
+    evaluationType: item.evaluation_type || '',
+    question: item.question,
+    expectedJson: item.expected_json || {},
+    category: item.category || '',
+    createdAt: formatDate(item.created_at)
+  }
+}
 function mapDataset(item) {
   return {
     id: item.id,
@@ -112,7 +139,8 @@ export function deleteEvaluationDataset(datasetId) {
 }
 
 export async function getEvaluationCases(datasetId) {
-  return request(`/admin/evaluations/datasets/${encodeURIComponent(datasetId)}/cases`)
+  const data = await request(`/admin/evaluations/datasets/${encodeURIComponent(datasetId)}/cases`)
+  return { ...data, items: (data.items || []).map(mapEvaluationCase) }
 }
 
 export function importEvaluationCases(datasetId, payload) {
@@ -122,6 +150,23 @@ export function importEvaluationCases(datasetId, payload) {
   })
 }
 
+
+export async function getAllEvaluationCases(params = {}) {
+  const query = new URLSearchParams()
+  if (params.datasetId) query.set('dataset_id', params.datasetId)
+  if (params.category) query.set('category', params.category)
+  if (params.keyword) query.set('keyword', params.keyword)
+  query.set('page', params.page || 1)
+  query.set('page_size', params.pageSize || 100)
+  const data = await request(`/admin/evaluations/cases?${query}`)
+  return { ...data, items: (data.items || []).map(mapEvaluationCase) }
+}
+
+export function deleteEvaluationCase(datasetId, caseId) {
+  return request(`/admin/evaluations/datasets/${encodeURIComponent(datasetId)}/cases/${encodeURIComponent(caseId)}`, {
+    method: 'DELETE'
+  })
+}
 export async function createIngestionQualityRun(payload) {
   const data = await request('/admin/evaluations/ingestion-quality/runs', {
     method: 'POST',
@@ -152,4 +197,16 @@ export async function getEvaluationRuns(params = {}) {
 export async function getEvaluationRunCases(runId) {
   const data = await request(`/admin/evaluations/runs/${encodeURIComponent(runId)}/cases`)
   return { ...data, items: (data.items || []).map(mapCaseResult) }
+}
+
+export async function getKbVersions(params = {}) {
+  const query = new URLSearchParams()
+  if (params.status) query.set('status', params.status)
+  const data = await request(`/admin/kb/versions${query.toString() ? `?${query}` : ''}`)
+  return {
+    ...data,
+    items: (data.items || []).map(mapKbVersion),
+    activeVersion: data.active_version || '',
+    previousVersion: data.previous_version || ''
+  }
 }

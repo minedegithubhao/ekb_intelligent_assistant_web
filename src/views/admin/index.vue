@@ -672,11 +672,14 @@
           </el-table-column>
           <el-table-column prop="sampleCount" label="样本数" width="110" align="center" />
           <el-table-column prop="createdAt" label="创建时间" width="180" />
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="操作" width="168" fixed="right" align="center">
             <template #default="scope">
-              <el-button link type="primary" @click="viewDatasetSamples(scope.row)">查看样本</el-button>
-              <el-button link type="primary" @click="importEvalSamples(scope.row)">导入</el-button>
-              <el-button link type="danger" @click="deleteEvalDataset(scope.row)">删除</el-button>
+              <div class="dataset-actions">
+                <el-button link type="primary" @click="viewDatasetSamples(scope.row)">查看</el-button>
+                <el-button link type="primary" @click="openSampleCreateDialog(scope.row)">新增</el-button>
+                <el-button link type="primary" @click="importEvalSamples(scope.row)">导入</el-button>
+                <el-button link type="danger" @click="deleteEvalDataset(scope.row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -910,7 +913,7 @@
             <el-table-column prop="taskId" label="任务ID" min-width="170" />
             <el-table-column label="评估类型" width="120">
               <template #default="scope">
-                <el-tag :type="scope.row.type === 'retrieval' ? 'primary' : 'warning'" effect="plain">
+                <el-tag :type="scope.row.type === 'retrieval_eval' ? 'primary' : 'warning'" effect="plain">
                   {{ scope.row.typeName }}
                 </el-tag>
               </template>
@@ -953,6 +956,115 @@
         </div>
       </section>
     </section>
+
+
+
+    <el-dialog v-model="evalDatasetDialogVisible" title="新建评估集" width="560px" :close-on-click-modal="false">
+      <el-form :model="evalDatasetForm" label-position="top">
+        <el-form-item label="评估集ID">
+          <el-input v-model="evalDatasetForm.datasetId" placeholder="自动生成，可按需修改" />
+        </el-form-item>
+        <el-form-item label="评估集名称">
+          <el-input v-model="evalDatasetForm.name" placeholder="请输入评估集名称" />
+        </el-form-item>
+        <el-form-item label="适用类型">
+          <el-select v-model="evalDatasetForm.evaluationType" placeholder="请选择适用类型" style="width: 100%">
+            <el-option label="检索评估" value="retrieval_eval" />
+            <el-option label="入库质量" value="ingestion_quality" />
+            <el-option label="混合评估" value="mixed" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="evalDatasetForm.description" type="textarea" :rows="3" placeholder="请输入评估集说明" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="evalDatasetDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="evalDatasetSaving" @click="submitEvalDataset">确定创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="sampleCreateDialogVisible"
+      title="新增评估样本"
+      width="640px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="sampleCreateForm" label-position="top">
+        <el-form-item label="所属评估集">
+          <el-select v-model="sampleCreateForm.datasetId" placeholder="请选择评估集" filterable style="width: 100%">
+            <el-option
+              v-for="item in evaluationDatasets"
+              :key="item.datasetId"
+              :label="`${item.datasetId} - ${item.name}`"
+              :value="item.datasetId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="样本ID">
+          <el-input v-model="sampleCreateForm.caseId" placeholder="不填则自动生成" />
+        </el-form-item>
+        <el-form-item label="问题">
+          <el-input v-model="sampleCreateForm.question" type="textarea" :rows="3" placeholder="请输入评估问题" />
+        </el-form-item>
+        <el-form-item label="期望 FAQ ID">
+          <el-input v-model="sampleCreateForm.expectedFaqIds" placeholder="多个 ID 用英文逗号分隔" />
+        </el-form-item>
+        <el-form-item label="期望知识库规则/文档 ID">
+          <el-input v-model="sampleCreateForm.expectedRuleIds" placeholder="多个 ID 用英文逗号分隔" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-input v-model="sampleCreateForm.category" placeholder="如 policy_fact / process_lookup" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sampleCreateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sampleCreateSaving" @click="submitSampleCreate">保存样本</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="sampleDialogVisible"
+      :title="`评估样本 - ${activeDataset?.name || activeDataset?.datasetId || ''}`"
+      width="1120px"
+      :close-on-click-modal="false"
+    >
+      <div class="sample-dialog-tools">
+        <el-button type="primary" plain @click="openSampleCreateDialog(activeDataset)">新增样本</el-button>
+        <el-button plain @click="downloadEvalSampleTemplate">下载 JSON 示例</el-button>
+        <el-button plain @click="fillSampleTemplate">填入示例</el-button>
+        <el-button plain @click="importEvalSamples(activeDataset)">导入默认样本</el-button>
+      </div>
+
+      <el-form label-position="top" class="sample-import-form">
+        <el-form-item label="批量导入 JSON">
+          <el-input
+            v-model="sampleImportJson"
+            type="textarea"
+            :rows="6"
+            placeholder="支持数组，或 { items: [...] }"
+          />
+        </el-form-item>
+        <el-button type="primary" plain @click="importBatchSampleJson">批量导入</el-button>
+      </el-form>
+
+      <el-table :data="activeDatasetSamples" v-loading="sampleDialogLoading" style="width: 100%; margin-top: 16px">
+        <el-table-column prop="caseId" label="样本ID" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="question" label="问题" min-width="260" show-overflow-tooltip />
+        <el-table-column label="期望结果 JSON" min-width="280" show-overflow-tooltip>
+          <template #default="scope">
+            <code>{{ formatJson(scope.row.expectedJson) }}</code>
+          </template>
+        </el-table-column>
+        <el-table-column prop="category" label="分类" width="130" show-overflow-tooltip />
+        <el-table-column prop="createdAt" label="创建时间" width="170" />
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="scope">
+            <el-button link type="danger" @click="deleteSingleEvalSample(scope.row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
     <el-drawer v-model="historyDrawerVisible" size="560px" :title="activeHistorySession?.title || '会话消息列表'">
       <div v-if="activeHistorySession" class="history-drawer-meta">
@@ -1449,6 +1561,19 @@ import {
   updateTermNormalization
 } from '@/api/adminConfig'
 import { createAdminUser, disableAdminUser, getAdminUsers, updateAdminUser } from '@/api/adminUsers'
+import {
+  createEvaluationDataset,
+  deleteEvaluationCase,
+  createIngestionQualityRun,
+  createRetrievalRun,
+  deleteEvaluationDataset,
+  getAllEvaluationCases,
+  getEvaluationCases,
+  getEvaluationDatasets,
+  getEvaluationRunCases,
+  getEvaluationRuns,
+  importEvaluationCases
+} from '@/api/adminEvaluation'
 import { testRetrieval } from '@/api/adminRetrieval'
 import { createKbVersion, getKbVersionPointer, getKbVersions, publishKbVersion, rollbackKbVersion } from '@/api/kbVersions'
 import {
@@ -2912,7 +3037,7 @@ const deleteKB = (id) => {
 }
 
 const getEvalTagType = (status) => {
-  const maps = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
+  const maps = { pending: 'info', running: 'primary', success: 'success', completed: 'success', failed: 'danger' }
   return maps[status] || 'info'
 }
 
@@ -2925,29 +3050,29 @@ const evaluationTabs = [
   { name: 'records', label: '评估记录' }
 ]
 const datasetQuery = reactive({ keyword: '', type: '' })
-const sampleQuery = reactive({ datasetId: '', category: '', keyword: '' })
-const sampleOverviewLoading = ref(false)
-const ingestionForm = reactive({ kbVersion: 'kb_v1', minLength: '80', maxLength: '1800', duplicateThreshold: '0.95' })
-const retrievalForm = reactive({ datasetId: 'jd_rules_retrieval_v1', kbVersion: 'kb_v1', faqTopK: '5', kbTopK: '10' })
+const ingestionForm = reactive({ kbVersion: '', minLength: '', maxLength: '', duplicateThreshold: '' })
+const retrievalForm = reactive({ datasetId: '', kbVersion: '', faqTopK: '5', kbTopK: '10' })
 const recordQuery = reactive({ type: '', status: '', keyword: '' })
 const activeRetrievalDetail = ref(null)
 
-const evaluationDatasets = ref([
-  {
-    datasetId: 'jd_rules_retrieval_v1',
-    name: '京东规则检索评估集',
-    type: 'retrieval_eval',
-    sampleCount: 86,
-    createdAt: '2026-06-23 10:00'
-  },
-  {
-    datasetId: 'jd_rules_mixed_v1',
-    name: '京东规则综合评估集',
-    type: 'mixed',
-    sampleCount: 128,
-    createdAt: '2026-06-22 18:30'
-  }
-])
+const evaluationDatasets = ref([])
+const kbVersionOptions = ref([])
+const kbVersionsLoading = ref(false)
+const evalDatasetDialogVisible = ref(false)
+const evalDatasetSaving = ref(false)
+const evalDatasetForm = reactive({ datasetId: '', name: '', evaluationType: 'retrieval_eval', description: '' })
+const sampleDialogVisible = ref(false)
+const sampleDialogLoading = ref(false)
+const activeDataset = ref(null)
+const activeDatasetSamples = ref([])
+const sampleImportJson = ref('')
+const singleSampleForm = reactive({ caseId: '', question: '', expectedFaqIds: '', expectedRuleIds: '', category: '' })
+const sampleQuery = reactive({ datasetId: '', category: '', keyword: '' })
+const allEvaluationSamples = ref([])
+const sampleOverviewLoading = ref(false)
+const sampleCreateDialogVisible = ref(false)
+const sampleCreateSaving = ref(false)
+const sampleCreateForm = reactive({ datasetId: '', caseId: '', question: '', expectedFaqIds: '', expectedRuleIds: '', category: '' })
 
 const filteredEvaluationDatasets = computed(() => {
   const keyword = datasetQuery.keyword.trim()
@@ -2958,224 +3083,18 @@ const filteredEvaluationDatasets = computed(() => {
   })
 })
 
-const evaluationSampleSeed = ref([
-  {
-    datasetId: 'jd_rules_retrieval_v1',
-    datasetName: '京东规则检索评估集',
-    caseId: 'eval_0001',
-    question: '个人/个体店出售假冒商品怎么处理？',
-    expectedJson: { expected_rule_id: '923540006109319168', hit_type: 'faq_or_doc' },
-    category: '违规治理',
-    createdAt: '2026-06-23 10:12'
-  },
-  {
-    datasetId: 'jd_rules_retrieval_v1',
-    datasetName: '京东规则检索评估集',
-    caseId: 'eval_0018',
-    question: 'SSD 固态硬盘最低质保多久？',
-    expectedJson: { expected_rule_id: '1076394019191394304', hit_type: 'doc' },
-    category: '质保服务',
-    createdAt: '2026-06-23 10:18'
-  },
-  {
-    datasetId: 'jd_rules_mixed_v1',
-    datasetName: '京东规则综合评估集',
-    caseId: 'eval_0031',
-    question: '宠物健康类目需要什么资质？',
-    expectedJson: { expected_rule_id: '880256294462820352', hit_type: 'doc' },
-    category: '类目资质',
-    createdAt: '2026-06-22 19:10'
-  }
-])
-const allEvaluationSamples = ref([])
-const kbVersionsLoading = computed(() => offlineLoading.value)
-const kbVersionOptions = computed(() => {
-  const versions = kbList.value.length
-    ? kbList.value.map((item) => ({
-        kbVersion: item.kb_version,
-        label: `${item.kb_version}${item.status ? ` · ${item.status}` : ''}`
-      }))
-    : [
-        { kbVersion: 'kb_v1', label: 'kb_v1' },
-        { kbVersion: 'kb_v2', label: 'kb_v2' }
-      ]
-  return versions
-})
-
-const filterEvaluationSamples = () => {
-  const keyword = sampleQuery.keyword.trim()
-  return evaluationSampleSeed.value.filter((item) => {
-    const matchedDataset = !sampleQuery.datasetId || item.datasetId === sampleQuery.datasetId
-    const matchedCategory = !sampleQuery.category || item.category.includes(sampleQuery.category)
-    const matchedKeyword =
-      !keyword ||
-      item.caseId.includes(keyword) ||
-      item.question.includes(keyword) ||
-      item.datasetId.includes(keyword) ||
-      item.datasetName.includes(keyword)
-    return matchedDataset && matchedCategory && matchedKeyword
-  })
-}
-
-const fetchAllEvaluationSamples = () => {
-  sampleOverviewLoading.value = true
-  allEvaluationSamples.value = filterEvaluationSamples()
-  sampleOverviewLoading.value = false
-}
-
-const formatJson = (value) => {
-  if (!value) return '-'
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
-}
-
-const openSampleCreateDialog = () => {
-  ElMessage.info('新增样本接口待后端接入')
-}
-
-const deleteSingleEvalSample = (row) => {
-  evaluationSampleSeed.value = evaluationSampleSeed.value.filter((item) => item.caseId !== row.caseId)
-  fetchAllEvaluationSamples()
-  ElMessage.success('样本已从当前演示列表移除')
-}
-
 const ingestionMetrics = reactive({
-  totalChunks: '12,000',
-  lowQualityChunks: '340',
-  tooShortRate: '4.0%',
-  duplicateRate: '2.0%'
+  totalChunks: '0',
+  lowQualityChunks: '0',
+  tooShortRate: '0',
+  duplicateRate: '0'
 })
 
-const problemChunks = ref([
-  {
-    chunkId: 'chunk_001',
-    ruleId: '923540006109319168',
-    title: '个人/个体合规管理规则',
-    length: 28,
-    issueType: '过短',
-    similarity: '-'
-  },
-  {
-    chunkId: 'chunk_088',
-    ruleId: '1076394019191394304',
-    title: '质保期服务规则',
-    length: 2500,
-    issueType: '过长',
-    similarity: '-'
-  },
-  {
-    chunkId: 'chunk_010',
-    ruleId: '880256294462820352',
-    title: '经营类目商品阈值明细表',
-    length: 820,
-    issueType: '重复',
-    similarity: '0.98'
-  }
-])
-
-const retrievalEvaluations = ref([
-  {
-    taskId: 'retrieval_eval_001',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    faqHitAt5: '81.25%',
-    kbRecallAt10: '86.67%',
-    kbMrrAt10: '0.742',
-    errorCount: 1
-  },
-  {
-    taskId: 'retrieval_eval_002',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v2',
-    status: 'running',
-    faqHitAt5: '',
-    kbRecallAt10: '',
-    kbMrrAt10: '',
-    errorCount: 0
-  }
-])
-
-const retrievalCaseResults = ref([
-  {
-    caseId: 'eval_0001',
-    question: '个人/个体店出售假冒商品怎么处理？',
-    rewrittenQuestion: '个人个体店 出售假冒商品 处罚',
-    expectedRuleId: '923540006109319168',
-    faqHit: 1,
-    kbRecall: 1,
-    kbRr: 1,
-    hits: [
-      { id: 'faq_001', title: 'FAQ #1 faq_001', score: '0.93', preview: '个人/个体店出售假冒商品怎么处理？' },
-      {
-        id: 'kb_001',
-        title: 'KB #1 个人/个体合规管理规则',
-        score: '0.88',
-        preview: '出售假冒商品的，平台可采取全店商品下架、永久禁止发布新商品、违约金、店铺清退等处理措施...'
-      }
-    ]
-  },
-  {
-    caseId: 'eval_0018',
-    question: 'SSD 固态硬盘最低质保多久？',
-    rewrittenQuestion: 'SSD 固态硬盘 最低质保 周期',
-    expectedRuleId: '1076394019191394304',
-    faqHit: 0,
-    kbRecall: 1,
-    kbRr: 0.5,
-    hits: [
-      { id: 'kb_018', title: 'KB #1 质保期服务规则', score: '0.79', preview: '不同类目商品的质保周期以平台规则和商品详情页承诺为准...' }
-    ]
-  },
-  {
-    caseId: 'eval_0031',
-    question: '宠物健康类目需要什么资质？',
-    rewrittenQuestion: '宠物健康 类目 入驻 资质',
-    expectedRuleId: '880256294462820352',
-    faqHit: 0,
-    kbRecall: 0,
-    kbRr: 0,
-    hits: []
-  }
-])
-
-const activeRetrievalCase = ref(retrievalCaseResults.value[0])
-
-const evaluationRecords = ref([
-  {
-    taskId: 'retrieval_eval_001',
-    type: 'retrieval',
-    typeName: '检索评估',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    metrics: 'FAQ Hit@5 81.25% / KB Recall@10 86.67% / MRR 0.742',
-    finishedAt: '2026-06-23 10:05'
-  },
-  {
-    taskId: 'ingest_eval_014',
-    type: 'ingestion',
-    typeName: '入库质量',
-    datasetId: '-',
-    kbVersion: 'kb_v1',
-    status: 'completed',
-    metrics: '低质量 340 / 过短率 4.0% / 过长率 3.0% / 重复率 2.0%',
-    finishedAt: '2026-06-23 09:40'
-  },
-  {
-    taskId: 'retrieval_eval_002',
-    type: 'retrieval',
-    typeName: '检索评估',
-    datasetId: 'jd_rules_retrieval_v1',
-    kbVersion: 'kb_v2',
-    status: 'running',
-    metrics: '-',
-    finishedAt: '-'
-  }
-])
+const problemChunks = ref([])
+const retrievalEvaluations = ref([])
+const retrievalCaseResults = ref([])
+const activeRetrievalCase = ref({ caseId: '-', hits: [] })
+const evaluationRecords = ref([])
 
 const filteredEvaluationRecords = computed(() => {
   const keyword = recordQuery.keyword.trim()
@@ -3188,70 +3107,465 @@ const filteredEvaluationRecords = computed(() => {
   })
 })
 
-const fetchEvaluationDatasets = () => {
-  // TODO: replace mock data with backend API when evaluation dataset endpoints are ready.
-  ElMessage.success('评估集列表已刷新')
+const defaultEvaluationCases = [
+  {
+    case_id: 'eval_sample_001',
+    question: '公司的年假规则是什么？',
+    expected_json: {
+      expected_faq_ids: ['faq_001'],
+      expected_rule_ids: ['rule_annual_leave']
+    },
+    category: 'policy_fact'
+  },
+  {
+    case_id: 'eval_sample_002',
+    question: 'SSD 故障时应该如何申请更换？',
+    expected_json: {
+      expected_faq_ids: [],
+      expected_rule_ids: ['rule_ssd_replacement']
+    },
+    category: 'process_lookup'
+  },
+  {
+    case_id: 'eval_sample_003',
+    question: '报销发票抬头填写有什么要求？',
+    expected_json: {
+      expected_faq_ids: ['faq_invoice_title'],
+      expected_rule_ids: ['rule_reimbursement_invoice']
+    },
+    category: 'policy_fact'
+  }
+]
+
+const formatJson = (value) => JSON.stringify(value || {}, null, 2)
+const pad2 = (value) => String(value).padStart(2, '0')
+const formatCompactDate = (date = new Date()) => {
+  return [
+    date.getFullYear(),
+    pad2(date.getMonth() + 1),
+    pad2(date.getDate()),
+    pad2(date.getHours()),
+    pad2(date.getMinutes()),
+    pad2(date.getSeconds())
+  ].join('')
+}
+const generateEvalDatasetId = () => `eval_set_${formatCompactDate()}_${Math.random().toString(36).slice(2, 6)}`
+const generateEvalCaseId = () => `eval_case_${formatCompactDate()}_${Math.random().toString(36).slice(2, 6)}`
+
+const resetEvalDatasetForm = () => {
+  evalDatasetForm.datasetId = generateEvalDatasetId()
+  evalDatasetForm.name = ''
+  evalDatasetForm.evaluationType = 'retrieval_eval'
+  evalDatasetForm.description = ''
 }
 
+const resetSampleCreateForm = () => {
+  sampleCreateForm.datasetId = sampleQuery.datasetId || evaluationDatasets.value[0]?.datasetId || ''
+  sampleCreateForm.caseId = ''
+  sampleCreateForm.question = ''
+  sampleCreateForm.expectedFaqIds = ''
+  sampleCreateForm.expectedRuleIds = ''
+  sampleCreateForm.category = sampleQuery.category || ''
+}
+
+const openSampleCreateDialog = (dataset = null) => {
+  resetSampleCreateForm()
+  if (dataset?.datasetId) sampleCreateForm.datasetId = dataset.datasetId
+  sampleCreateDialogVisible.value = true
+}
+
+const resetSingleSampleForm = () => {
+  singleSampleForm.caseId = ''
+  singleSampleForm.question = ''
+  singleSampleForm.expectedFaqIds = ''
+  singleSampleForm.expectedRuleIds = ''
+  singleSampleForm.category = ''
+}
+
+const fillSampleTemplate = () => {
+  sampleImportJson.value = formatJson({ items: defaultEvaluationCases })
+}
+
+const normalizeExpectedList = (value) => String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
+const normalizeSampleItem = (item) => ({
+  case_id: String(item.case_id || item.caseId || generateEvalCaseId()).trim(),
+  question: String(item.question || '').trim(),
+  expected_json: item.expected_json || item.expectedJson || {
+    expected_faq_ids: normalizeExpectedList(item.expected_faq_ids || item.expectedFaqIds),
+    expected_rule_ids: normalizeExpectedList(item.expected_rule_ids || item.expectedRuleIds)
+  },
+  category: item.category || null
+})
+
+const parseSampleImportJson = () => {
+  const raw = sampleImportJson.value.trim()
+  if (!raw) throw new Error('请先粘贴样本 JSON')
+  const parsed = JSON.parse(raw)
+  const items = Array.isArray(parsed) ? parsed : parsed.items
+  if (!Array.isArray(items) || items.length === 0) throw new Error('JSON 需要是数组，或包含 items 数组')
+  return items.map(normalizeSampleItem).filter((item) => item.case_id && item.question)
+}
+
+const downloadEvalSampleTemplate = () => {
+  const content = formatJson({ items: defaultEvaluationCases })
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'evaluation_samples_template.json'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const applyDefaultKbVersion = (version) => {
+  if (!version) return
+  if (!ingestionForm.kbVersion) ingestionForm.kbVersion = version
+  if (!retrievalForm.kbVersion) retrievalForm.kbVersion = version
+}
+
+const fetchKbVersionOptions = async () => {
+  kbVersionsLoading.value = true
+  try {
+    const data = await getKbVersions()
+    kbVersionOptions.value = (data.items || []).map((item) => ({
+      kbVersion: item.kb_version,
+      status: item.status || '-',
+      label: `${item.kb_version} | ${item.status || '-'}`
+    }))
+    const defaultVersion = data.active_version || data.activeVersion || kbVersionOptions.value[0]?.kbVersion || ''
+    applyDefaultKbVersion(defaultVersion)
+  } catch (error) {
+    ElMessage.error(error.message || '知识库版本列表获取失败')
+  } finally {
+    kbVersionsLoading.value = false
+  }
+}
+
+const toNumberOrNull = (value) => {
+  if (value === null || value === undefined || String(value).trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const numberOrDefault = (value, defaultValue) => {
+  const parsed = toNumberOrNull(value)
+  return parsed === null ? defaultValue : parsed
+}
+
+const formatPercentMetric = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`
+
+const applyIngestionRun = (run) => {
+  const summary = run.summary || {}
+  const detail = run.detail || {}
+  ingestionMetrics.totalChunks = String(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
+  ingestionMetrics.lowQualityChunks = String(summary.low_quality_issue_count ?? detail.chunk_metrics?.low_quality_issue_count ?? 0)
+  const chunkCount = Number(summary.chunk_count ?? detail.chunk_metrics?.chunk_count ?? 0)
+  const duplicateChunkCount = Number(summary.duplicate_chunk_count ?? detail.chunk_metrics?.duplicate_chunk_count ?? 0)
+  ingestionMetrics.tooShortRate = formatPercentMetric(summary.too_short_chunk_rate ?? detail.chunk_metrics?.too_short_chunk_rate ?? 0)
+  ingestionMetrics.duplicateRate = formatPercentMetric(chunkCount ? duplicateChunkCount / chunkCount : 0)
+  problemChunks.value = (detail.low_quality_issues || []).slice(0, 100).map((item) => ({
+    chunkId: item.chunk_id,
+    ruleId: item.document_id || '-',
+    title: item.reason,
+    length: item.text_length,
+    issueType: item.issue_type,
+    similarity: item.unique_ratio ?? item.duplicate_hash ?? '-'
+  }))
+}
+
+const fetchEvaluationDatasets = async () => {
+  try {
+    const data = await getEvaluationDatasets({ keyword: datasetQuery.keyword, evaluationType: datasetQuery.type })
+    evaluationDatasets.value = data.items || []
+    if (!retrievalForm.datasetId && evaluationDatasets.value.length) {
+      retrievalForm.datasetId = evaluationDatasets.value[0].datasetId
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '评估集加载失败')
+  }
+}
+
+const fetchAllEvaluationSamples = async () => {
+  sampleOverviewLoading.value = true
+  try {
+    const data = await getAllEvaluationCases({
+      datasetId: sampleQuery.datasetId,
+      category: sampleQuery.category,
+      keyword: sampleQuery.keyword,
+      pageSize: 200
+    })
+    allEvaluationSamples.value = data.items || []
+  } catch (error) {
+    ElMessage.error(error.message || '样本列表加载失败')
+  } finally {
+    sampleOverviewLoading.value = false
+  }
+}
+
+const submitSampleCreate = async () => {
+  if (!sampleCreateForm.datasetId) {
+    ElMessage.warning('请选择评估集')
+    return
+  }
+  if (!sampleCreateForm.question.trim()) {
+    ElMessage.warning('请填写问题')
+    return
+  }
+  sampleCreateSaving.value = true
+  try {
+    const item = normalizeSampleItem({
+      caseId: sampleCreateForm.caseId,
+      question: sampleCreateForm.question,
+      expectedFaqIds: sampleCreateForm.expectedFaqIds,
+      expectedRuleIds: sampleCreateForm.expectedRuleIds,
+      category: sampleCreateForm.category
+    })
+    await importEvaluationCases(sampleCreateForm.datasetId, { overwrite: true, items: [item] })
+    ElMessage.success('样本新增成功')
+    sampleCreateDialogVisible.value = false
+    await fetchEvaluationDatasets()
+    await fetchAllEvaluationSamples()
+    if (activeDataset.value?.datasetId === sampleCreateForm.datasetId) await refreshDatasetSamples()
+  } catch (error) {
+    ElMessage.error(error.message || '样本新增失败')
+  } finally {
+    sampleCreateSaving.value = false
+  }
+}
+
+const deleteSingleEvalSample = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定删除样本 ${row.caseId} 吗？如果所属评估集已有评估记录，后端会拒绝删除。`, '删除评估样本', { type: 'warning' })
+    await deleteEvaluationCase(row.datasetId, row.caseId)
+    ElMessage.success('样本已删除')
+    await fetchEvaluationDatasets()
+    await fetchAllEvaluationSamples()
+    if (activeDataset.value?.datasetId === row.datasetId) await refreshDatasetSamples()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '删除失败')
+  }
+}
 
 const createEvalDataset = () => {
-  // TODO: open dataset creation dialog after backend contract is finalized.
-  ElMessage.info('新建评估集接口待后端接入')
+  resetEvalDatasetForm()
+  evalDatasetDialogVisible.value = true
 }
 
-const importEvalSamples = () => {
-  // TODO: connect sample import/upload API.
-  ElMessage.info('样本导入接口待后端接入')
+const submitEvalDataset = async () => {
+  const datasetId = evalDatasetForm.datasetId.trim()
+  const name = evalDatasetForm.name.trim()
+  if (!datasetId) {
+    ElMessage.warning('评估集ID不能为空')
+    return
+  }
+  if (!name) {
+    ElMessage.warning('评估集名称不能为空')
+    return
+  }
+  evalDatasetSaving.value = true
+  try {
+    await createEvaluationDataset({
+      dataset_id: datasetId,
+      name,
+      evaluation_type: evalDatasetForm.evaluationType,
+      description: evalDatasetForm.description.trim()
+    })
+    ElMessage.success('评估集创建成功')
+    evalDatasetDialogVisible.value = false
+    await fetchEvaluationDatasets()
+  } catch (error) {
+    ElMessage.error(error.message || '评估集创建失败')
+  } finally {
+    evalDatasetSaving.value = false
+  }
 }
 
-const viewDatasetSamples = (row) => {
-  // TODO: connect dataset sample list API.
-  ElMessage.info(`查看 ${row.datasetId} 样本接口待后端接入`)
+const openDatasetSamples = async (row) => {
+  activeDataset.value = row
+  sampleDialogVisible.value = true
+  await refreshDatasetSamples()
 }
 
-const deleteEvalDataset = (row) => {
-  // TODO: connect dataset delete API.
-  ElMessage.warning(`删除评估集 ${row.datasetId} 接口待后端接入`)
+const refreshDatasetSamples = async () => {
+  if (!activeDataset.value?.datasetId) {
+    activeDatasetSamples.value = []
+    return
+  }
+  sampleDialogLoading.value = true
+  try {
+    const data = await getEvaluationCases(activeDataset.value.datasetId)
+    activeDatasetSamples.value = data.items || []
+    activeDataset.value = { ...activeDataset.value, sampleCount: data.total ?? activeDatasetSamples.value.length }
+  } catch (error) {
+    ElMessage.error(error.message || '样本加载失败')
+    activeDatasetSamples.value = []
+  } finally {
+    sampleDialogLoading.value = false
+  }
 }
 
-const runIngestionEvaluation = () => {
-  // TODO: connect ingestion quality evaluation API.
-  ElMessage.success('已生成入库质量评估演示结果')
+const importEvalSamples = async (row) => {
+  const datasetId = row?.datasetId || retrievalForm.datasetId
+  if (!datasetId) {
+    ElMessage.warning('请先选择评估集')
+    return
+  }
+  try {
+    await importEvaluationCases(datasetId, { overwrite: true, items: defaultEvaluationCases })
+    ElMessage.success('默认样本已导入')
+    await fetchEvaluationDatasets()
+    if (activeDataset.value?.datasetId === datasetId) await refreshDatasetSamples()
+  } catch (error) {
+    ElMessage.error(error.message || '样本导入失败')
+  }
 }
 
-const createRetrievalEvaluation = () => {
-  // TODO: connect retrieval evaluation task API.
-  ElMessage.success('已创建检索评估演示任务')
+const importBatchSampleJson = async () => {
+  if (!activeDataset.value?.datasetId) {
+    ElMessage.warning('请先打开评估样本弹窗')
+    return
+  }
+  try {
+    const items = parseSampleImportJson()
+    await importEvaluationCases(activeDataset.value.datasetId, { overwrite: true, items })
+    ElMessage.success(`已导入 ${items.length} 条样本`)
+    await fetchEvaluationDatasets()
+    await refreshDatasetSamples()
+  } catch (error) {
+    ElMessage.error(error.message || '批量导入失败')
+  }
 }
 
-const openRetrievalDetail = (row) => {
+const importSingleEvalSample = async () => {
+  if (!activeDataset.value?.datasetId) {
+    ElMessage.warning('请先打开评估样本弹窗')
+    return
+  }
+  if (!singleSampleForm.question.trim()) {
+    ElMessage.warning('请填写问题')
+    return
+  }
+  try {
+    const item = normalizeSampleItem({
+      caseId: singleSampleForm.caseId,
+      question: singleSampleForm.question,
+      expectedFaqIds: singleSampleForm.expectedFaqIds,
+      expectedRuleIds: singleSampleForm.expectedRuleIds,
+      category: singleSampleForm.category
+    })
+    await importEvaluationCases(activeDataset.value.datasetId, { overwrite: true, items: [item] })
+    ElMessage.success('单条样本已导入')
+    await fetchEvaluationDatasets()
+    await refreshDatasetSamples()
+    resetSingleSampleForm()
+  } catch (error) {
+    ElMessage.error(error.message || '单条导入失败')
+  }
+}
+
+const viewDatasetSamples = async (row) => {
+  await openDatasetSamples(row)
+}
+
+const deleteEvalDataset = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定删除评估集 ${row.datasetId} 吗？`, '删除评估集', { type: 'warning' })
+    await deleteEvaluationDataset(row.datasetId)
+    ElMessage.success('评估集已删除')
+    await fetchEvaluationDatasets()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '评估集删除失败')
+  }
+}
+
+const runIngestionEvaluation = async () => {
+  try {
+    const run = await createIngestionQualityRun({
+      dataset: 'enterprise',
+      knowledge_base_version: ingestionForm.kbVersion,
+      min_length: numberOrDefault(ingestionForm.minLength, 80),
+      max_length: numberOrDefault(ingestionForm.maxLength, 1800),
+      duplicate_threshold: numberOrDefault(ingestionForm.duplicateThreshold, 0.95)
+    })
+    applyIngestionRun(run)
+    ElMessage.success('入库质量评估完成')
+    await fetchEvaluationRecords()
+  } catch (error) {
+    ElMessage.error(error.message || '入库质量评估失败')
+  }
+}
+
+const createRetrievalEvaluation = async () => {
+  if (!retrievalForm.datasetId) {
+    ElMessage.warning('请选择评估集')
+    return
+  }
+  try {
+    const run = await createRetrievalRun({
+      dataset_id: retrievalForm.datasetId,
+      knowledge_base_version: retrievalForm.kbVersion,
+      faq_top_k: Number(retrievalForm.faqTopK) || 5,
+      kb_top_k: Number(retrievalForm.kbTopK) || 10,
+      mock_mode: false
+    })
+    retrievalEvaluations.value.unshift(run)
+    ElMessage.success('检索评估完成')
+    await fetchEvaluationRecords()
+  } catch (error) {
+    ElMessage.error(error.message || '检索评估失败')
+  }
+}
+
+const openRetrievalDetail = async (row) => {
   activeRetrievalDetail.value = row
-  activeRetrievalCase.value = retrievalCaseResults.value[0]
+  try {
+    const data = await getEvaluationRunCases(row.runId || row.taskId)
+    retrievalCaseResults.value = data.items || []
+    activeRetrievalCase.value = retrievalCaseResults.value[0] || { caseId: '-', hits: [] }
+  } catch (error) {
+    retrievalCaseResults.value = []
+    activeRetrievalCase.value = { caseId: '-', hits: [] }
+    ElMessage.error(error.message || '评估详情加载失败')
+  }
 }
 
-const rerunRetrievalEvaluation = (row) => {
-  // TODO: connect retrieval evaluation rerun API.
-  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
+const rerunRetrievalEvaluation = async (row) => {
+  retrievalForm.datasetId = row.datasetId === '-' ? retrievalForm.datasetId : row.datasetId
+  retrievalForm.kbVersion = row.kbVersion === '-' ? retrievalForm.kbVersion : row.kbVersion
+  await createRetrievalEvaluation()
 }
 
-const fetchEvaluationRecords = () => {
-  // TODO: replace mock records with backend API.
-  ElMessage.success('评估记录已刷新')
+const fetchEvaluationRecords = async () => {
+  try {
+    const data = await getEvaluationRuns({
+      evaluationType: recordQuery.type,
+      status: recordQuery.status,
+      keyword: recordQuery.keyword,
+      pageSize: 50
+    })
+    evaluationRecords.value = data.items || []
+    retrievalEvaluations.value = evaluationRecords.value.filter((item) => item.type === 'retrieval_eval')
+  } catch (error) {
+    ElMessage.error(error.message || '评估记录加载失败')
+  }
 }
 
-const viewEvaluationRecord = (row) => {
-  if (row.type === 'retrieval') {
+const viewEvaluationRecord = async (row) => {
+  if (row.type === 'retrieval_eval') {
     evaluationTab.value = 'retrieval'
-    const task = retrievalEvaluations.value.find((item) => item.taskId === row.taskId) || retrievalEvaluations.value[0]
-    openRetrievalDetail(task)
+    await openRetrievalDetail(row)
     return
   }
   evaluationTab.value = 'ingestion'
+  if (row.detail) applyIngestionRun(row)
 }
 
-const rerunEvaluationRecord = (row) => {
-  // TODO: connect common evaluation rerun API.
-  ElMessage.info(`重新执行 ${row.taskId} 接口待后端接入`)
+const rerunEvaluationRecord = async (row) => {
+  if (row.type === 'retrieval_eval') {
+    await rerunRetrievalEvaluation(row)
+    return
+  }
+  await runIngestionEvaluation()
 }
 
 onMounted(() => {
@@ -3263,6 +3577,7 @@ onMounted(() => {
   fetchKeywordRules()
   fetchTermNormalizations()
   fetchKnowledgeWorkbench()
+  fetchKbVersionOptions()
   fetchEvaluationDatasets()
   fetchAllEvaluationSamples()
   fetchEvaluationRecords()
@@ -3667,6 +3982,21 @@ onBeforeUnmount(() => {
 
 .status-dot.disabled {
   background: #86909c;
+}
+
+
+.dataset-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(52px, 1fr));
+  gap: 6px 10px;
+  justify-items: center;
+  align-items: center;
+}
+
+.dataset-actions .el-button {
+  margin-left: 0;
+  min-width: 44px;
+  padding: 0;
 }
 
 .score-text {

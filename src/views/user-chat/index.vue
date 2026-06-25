@@ -140,18 +140,22 @@
 
       <footer class="composer">
         <div class="composer-toolbar">
-          <span class="composer-label">提问知识库</span>
-          <el-select
-            v-if="isAdmin"
-            v-model="knowledgeBaseType"
-            class="knowledge-select"
-            size="small"
-            @change="handleKnowledgeBaseChange"
-          >
-            <el-option label="企业知识库" value="enterprise" />
-            <el-option label="个人知识库" value="personal" />
-          </el-select>
-          <el-tag v-else type="primary" effect="plain">{{ activeKnowledgeBaseName }}</el-tag>
+          <div class="knowledge-switch" aria-label="知识库选择">
+            <button
+              type="button"
+              :class="{ active: knowledgeBaseType === 'enterprise' }"
+              @click="handleKnowledgeBaseChange('enterprise')"
+            >
+              企业知识库
+            </button>
+            <button
+              type="button"
+              :class="{ active: knowledgeBaseType === 'personal' }"
+              @click="handleKnowledgeBaseChange('personal')"
+            >
+              个人知识库
+            </button>
+          </div>
         </div>
         <div class="composer-input-row">
           <el-input
@@ -251,6 +255,8 @@ const handleLogout = async () => {
 }
 
 const handleKnowledgeBaseChange = async (value) => {
+  if (!knowledgeBaseNames[value]) return
+  knowledgeBaseType.value = value
   localStorage.setItem('knowledge_base_type', value)
   localStorage.setItem('knowledge_base_name', knowledgeBaseNames[value] || '')
   ElMessage.success(`已切换到${knowledgeBaseNames[value]}`)
@@ -1493,7 +1499,7 @@ a.source-title:hover {
 }
 
 .message-list {
-  padding-bottom: 220px;
+  padding-bottom: 142px;
 }
 
 .message-bubble p {
@@ -1510,9 +1516,9 @@ a.source-title:hover {
 }
 
 .composer {
-  width: clamp(520px, 50%, 760px);
-  max-width: 760px;
-  margin: 0 auto 34px;
+  width: calc(100% - 68px);
+  max-width: none;
+  margin: 0 auto 24px;
   padding: 0;
   background: transparent;
   border: none;
@@ -1522,42 +1528,66 @@ a.source-title:hover {
 }
 
 .composer-toolbar {
-  justify-content: flex-end;
-  min-height: 30px;
-  padding: 0 4px 8px;
+  justify-content: flex-start;
+  min-height: 26px;
+  padding: 0 2px 8px;
   background: transparent;
 }
 
-.composer-label {
-  margin-right: auto;
+.knowledge-switch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(222, 216, 202, 0.86);
+  border-radius: 999px;
+  box-shadow: var(--eks-shadow-hairline);
 }
 
-.knowledge-select {
-  width: 168px;
+.knowledge-switch button {
+  height: 28px;
+  padding: 0 13px;
+  color: var(--eks-ink-muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.knowledge-switch button:hover {
+  color: var(--eks-navy);
+  background: rgba(23, 54, 93, 0.06);
+}
+
+.knowledge-switch button.active {
+  color: #fff;
+  background: var(--eks-navy);
+  box-shadow: 0 6px 16px rgba(23, 54, 93, 0.18);
 }
 
 .composer-input-row {
-  grid-template-columns: minmax(0, 1fr) 66px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
-  background: rgba(253, 251, 246, 0.94);
-  border: 1px solid rgba(222, 216, 202, 0.86);
-  border-radius: 12px;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 24px 54px rgba(23, 54, 93, 0.16);
+  padding: 8px;
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-line);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(23, 54, 93, 0.1);
 }
 
 .composer :deep(.el-textarea__inner) {
-  min-height: 86px !important;
-  height: 86px;
-  padding: 25px 18px;
+  min-height: 44px !important;
+  height: 44px;
+  padding: 10px 12px;
   background: transparent;
   border: none;
   border-radius: 10px;
   box-shadow: none;
-  font-size: 18px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .composer :deep(.el-textarea__inner:focus) {
@@ -1567,18 +1597,23 @@ a.source-title:hover {
 
 .composer .el-button {
   align-self: center;
-  width: 66px;
-  height: 66px;
-  min-height: 66px;
+  width: 48px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
   color: #fff;
-  background: #2362fb;
-  border-color: #2362fb;
-  border-radius: 7px;
+  background: var(--eks-navy);
+  border-color: var(--eks-navy);
+  border-radius: 8px;
+}
+
+.composer .el-button :deep(span) {
+  display: none;
 }
 
 .composer .el-button:hover {
-  background: #1d4fd7;
-  border-color: #1d4fd7;
+  background: #214a7c;
+  border-color: #214a7c;
 }
 
 .composer .el-button.is-disabled,
@@ -1598,7 +1633,7 @@ a.source-title:hover {
   }
 
   .message-list {
-    padding-bottom: 160px;
+    padding-bottom: 134px;
   }
 
   .composer {
@@ -1609,28 +1644,32 @@ a.source-title:hover {
   }
 
   .composer-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
-  .knowledge-select {
+  .knowledge-switch {
     width: 100%;
   }
 
+  .knowledge-switch button {
+    flex: 1;
+  }
+
   .composer-input-row {
-    grid-template-columns: 1fr;
-    padding: 12px;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    padding: 8px;
   }
 
   .composer :deep(.el-textarea__inner) {
-    height: auto;
-    min-height: 72px !important;
-    padding: 14px;
+    height: 44px;
+    min-height: 44px !important;
+    padding: 10px 12px;
     font-size: 15px;
   }
 
   .composer .el-button {
-    width: 100%;
+    width: 48px;
     height: 44px;
     min-height: 44px;
   }

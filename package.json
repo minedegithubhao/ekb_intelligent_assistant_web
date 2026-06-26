@@ -1,0 +1,38 @@
+{
+  "name": "ekb-intelligent-assistant-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "element-plus": "^2.14.2",
+    "markdown-it": "^14.2.0",
+    "vue": "^3.5.38",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.3.0"
+  },
+  "description": "EKB 智能助手前端项目，基于 Vue 3、Vite 和 Element Plus 构建。",
+  "main": "vite.config.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minedegithubhao/ekb_intelligent_assistant_web.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/minedegithubhao/ekb_intelligent_assistant_web/issues"
+  },
+  "homepage": "https://github.com/minedegithubhao/ekb_intelligent_assistant_web#readme"
+}
